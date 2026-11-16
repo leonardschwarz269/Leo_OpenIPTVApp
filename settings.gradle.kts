@@ -11,6 +11,9 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven("https://api.xposed.info/")
+        flatDir {
+            dirs("app/src/main/lib")
+        }
     }
 }
 
