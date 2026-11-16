@@ -17,6 +17,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -67,9 +68,10 @@ enum class SettingsPage(
     PLAYLISTS("Плейлисты и EPG", "Управление плейлистами M3U, источниками EPG и синхронизация", Icons.Rounded.ListAlt),
     APPEARANCE("Внешний вид и тема", "Цветовые темы, Material You 3, стили интерфейса, формы значков, шрифты и размер списка", Icons.Rounded.Palette),
     PLAYER("Плеер и воспроизведение", "Соотношение сторон, декодирование, буферизация, фоновый режим и таймер сна", Icons.Rounded.PlayCircle),
+    WHEEL("Настройки Android Auto", "Модуль LSPosed, кнопки на руле, параметры воспроизведения и зеркалирования в авто", Icons.Rounded.DirectionsCar),
     CATEGORIES("Категории и каналы", "Режим отображения, сортировка групп, скрытие категорий и каналов", Icons.Rounded.Category),
     NAVIGATION("Навигация и управление", "Поведение кнопки Назад, жесты управления и отображение ссылок", Icons.Rounded.Navigation),
-    BACKUP("Резервное копирование и сеть", "Экспорт и импорт настроек, передача по Wi-Fi, LSPosed и Android Auto", Icons.Rounded.Backup),
+    BACKUP("Резервное копирование и сеть", "Экспорт и импорт настроек и передача по Wi-Fi", Icons.Rounded.Backup),
     ABOUT("О приложении и сообщество", "Обновления приложения, Telegram, GitHub и сброс данных", Icons.Rounded.Info)
 }
 
@@ -117,6 +119,7 @@ fun SettingsScreen(
     val autoStartLast by viewModel.autoStartLast.collectAsState()
     val forceLandscape by viewModel.forceLandscape.collectAsState()
     val backgroundPlayback by viewModel.backgroundPlayback.collectAsState()
+    val carFullscreenMode by viewModel.carFullscreenMode.collectAsState()
     val autoHideTimeout by viewModel.autoHideTimeout.collectAsState()
     val bufferingLevel by viewModel.bufferingLevel.collectAsState()
     val backBehavior by viewModel.backBehavior.collectAsState()
@@ -144,6 +147,11 @@ fun SettingsScreen(
     val playerGlassTint by viewModel.playerGlassTint.collectAsState()
     val cardBadgeStyle by viewModel.cardBadgeStyle.collectAsState()
     val iconRotationEnabled by viewModel.iconRotationEnabled.collectAsState()
+
+    val wheelNextAction by viewModel.wheelNextAction.collectAsState()
+    val wheelPrevAction by viewModel.wheelPrevAction.collectAsState()
+    val wheelChannelUpAction by viewModel.wheelChannelUpAction.collectAsState()
+    val wheelChannelDownAction by viewModel.wheelChannelDownAction.collectAsState()
 
     val isEpgLoading by viewModel.isEpgLoading.collectAsState()
     val epgStatus by viewModel.epgStatus.collectAsState()
@@ -357,6 +365,7 @@ fun SettingsScreen(
                                     SettingsPage.PLAYLISTS -> Icons.Rounded.ListAlt
                                     SettingsPage.APPEARANCE -> Icons.Rounded.Palette
                                     SettingsPage.PLAYER -> Icons.Rounded.PlayCircle
+                                    SettingsPage.WHEEL -> Icons.Rounded.DirectionsCar
                                     SettingsPage.CATEGORIES -> Icons.Rounded.Category
                                     SettingsPage.NAVIGATION -> Icons.Rounded.Navigation
                                     SettingsPage.BACKUP -> Icons.Rounded.Backup
@@ -369,6 +378,7 @@ fun SettingsScreen(
                                     searchQuery = ""
                                 },
                                 shapeName = badgeShape,
+                                badgeColorName = badgeColor,
                                 rotationEnabled = iconRotationEnabled
                             )
                         }
@@ -390,10 +400,12 @@ fun SettingsScreen(
                             stats = listOf(
                                 "Плейлисты" to "${playlists.count { it.enabled }}",
                                 "EPG" to "${epgSources.count { it.enabled }}",
-                                "Версия" to "5.5",
+                                tr("Версия") to "6.0",
                                 "Тема" to themeMode
                             ),
-                            badgeShape = badgeShape
+                            badgeShape = badgeShape,
+                            badgeColorName = badgeColor,
+                            rotationEnabled = iconRotationEnabled
                         )
                     }
 
@@ -420,6 +432,7 @@ fun SettingsScreen(
                             },
                             onClick = { activePage = page },
                             shapeName = badgeShape,
+                            badgeColorName = badgeColor,
                             rotationEnabled = iconRotationEnabled
                         )
                     }
@@ -617,7 +630,9 @@ fun SettingsScreen(
                                             ),
                                             selected = language,
                                             onSelect = { viewModel.updateSetting("language", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -630,7 +645,9 @@ fun SettingsScreen(
                                             ),
                                             selected = uiStyle,
                                             onSelect = { viewModel.updateSetting("ui_style", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -638,14 +655,14 @@ fun SettingsScreen(
                                             title = "Форма значков Material You 3",
                                             subtitle = "Форма фонового геометрического значка рядом с названием",
                                             options = listOf(
-                                                "Cookie" to "Печенька (Cookie)",
-                                                "Clover" to "Клевер (Clover)",
-                                                "Burst" to "Вспышка (Burst)",
-                                                "Scallop" to "Волна (Scallop)",
-                                                "Sunny" to "Солнце (Sunny)",
-                                                "Star" to "Звезда (Star)",
-                                                "Pill" to "Капсула (Pill)",
-                                                "Teardrop" to "Капля (Teardrop)",
+                                                "Cookie" to "Печенька",
+                                                "Clover" to "Клевер",
+                                                "Burst" to "Вспышка",
+                                                "Scallop" to "Волна",
+                                                "Sunny" to "Солнце",
+                                                "Star" to "Звезда",
+                                                "Pill" to "Капсула",
+                                                "Teardrop" to "Капля",
                                                 "Pentagon" to "Пятиугольник",
                                                 "Hexagon" to "Шестиугольник",
                                                 "Octagon" to "Восьмиугольник",
@@ -656,6 +673,7 @@ fun SettingsScreen(
                                             selected = badgeShape,
                                             onSelect = { viewModel.updateSetting("badge_shape", it) },
                                             shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
                                             rotationEnabled = iconRotationEnabled
                                         )
 
@@ -672,7 +690,9 @@ fun SettingsScreen(
                                             ),
                                             selected = themeMode,
                                             onSelect = { viewModel.updateSetting("theme_mode", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -690,7 +710,9 @@ fun SettingsScreen(
                                             ),
                                             selected = accentColor,
                                             onSelect = { viewModel.updateSetting("accent_color", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -707,25 +729,31 @@ fun SettingsScreen(
                                             ),
                                             selected = panelColor,
                                             onSelect = { viewModel.updateSetting("panel_color", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
                                             icon = Icons.Rounded.Badge,
                                             title = "Цвет бейджиков",
-                                            subtitle = "Оттенок значков и иконок разделов",
+                                            subtitle = "Оттенок крутящихся значков и иконок разделов",
                                             options = listOf(
-                                                "Auto" to "Авто",
+                                                "Purple" to "Фиолетовый",
                                                 "Cyan" to "Бирюзовый",
-                                                "Purple" to "Сиреневый",
                                                 "Gold" to "Золотой",
                                                 "Lime" to "Лаймовый",
                                                 "Orange" to "Оранжевый",
-                                                "Pink" to "Розовый"
+                                                "Pink" to "Розовый",
+                                                "Red" to "Красный",
+                                                "Blue" to "Синий",
+                                                "Green" to "Зеленый"
                                             ),
                                             selected = badgeColor,
                                             onSelect = { viewModel.updateSetting("badge_color", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
                                     }
                                 }
@@ -738,7 +766,9 @@ fun SettingsScreen(
                                             subtitle = "Красивое вращение геометрических значков при нажатии",
                                             checked = iconRotationEnabled,
                                             onCheckedChange = { viewModel.updateSetting("icon_rotation_enabled", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -747,7 +777,9 @@ fun SettingsScreen(
                                             subtitle = "Светящийся контур при нажатии или фокусе",
                                             checked = expressiveGlow,
                                             onCheckedChange = { viewModel.updateSetting("expressive_glow", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -756,7 +788,9 @@ fun SettingsScreen(
                                             subtitle = "Плавающие мягкие градиентные фигуры на фоне",
                                             checked = ambientCanvas,
                                             onCheckedChange = { viewModel.updateSetting("ambient_canvas", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         SliderItem(
@@ -766,7 +800,9 @@ fun SettingsScreen(
                                             range = 8f..32f,
                                             format = { "${it.toInt()} dp" },
                                             onCommit = { viewModel.updateSetting("card_corner_radius", it.toInt()) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         SliderItem(
@@ -776,7 +812,9 @@ fun SettingsScreen(
                                             range = 1.00f..1.15f,
                                             format = { String.format(Locale.US, "%.2fx", it) },
                                             onCommit = { viewModel.updateSetting("spring_scale", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -790,7 +828,9 @@ fun SettingsScreen(
                                             ),
                                             selected = epgProgressStyle,
                                             onSelect = { viewModel.updateSetting("epg_progress_style", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -804,7 +844,9 @@ fun SettingsScreen(
                                             ),
                                             selected = playerGlassTint,
                                             onSelect = { viewModel.updateSetting("player_glass_tint", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
                                     }
                                 }
@@ -823,7 +865,9 @@ fun SettingsScreen(
                                             ),
                                             selected = listSize,
                                             onSelect = { viewModel.updateSetting("list_size", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         SliderItem(
@@ -832,8 +876,10 @@ fun SettingsScreen(
                                             value = fontSize,
                                             range = 10f..24f,
                                             format = { "${it.toInt()} sp" },
-                                            onCommit = { viewModel.updateSetting("font_size", it) },
-                                            shapeName = badgeShape
+                                            onCommit = { viewModel.updateSetting("font_size", it.toInt()) },
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -842,7 +888,9 @@ fun SettingsScreen(
                                             subtitle = "Отображать порядковые номера каналов в списке",
                                             checked = showChannelNumbers,
                                             onCheckedChange = { viewModel.updateSetting("show_channel_numbers", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -851,7 +899,9 @@ fun SettingsScreen(
                                             subtitle = "Отображать часы на панели плеера",
                                             checked = showClock,
                                             onCheckedChange = { viewModel.updateSetting("show_clock", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         if (showClock) {
@@ -867,7 +917,9 @@ fun SettingsScreen(
                                                 ),
                                                 selected = clockPosition,
                                                 onSelect = { viewModel.updateSetting("clock_position", it) },
-                                                shapeName = badgeShape
+                                                shapeName = badgeShape,
+                                                badgeColorName = badgeColor,
+                                                rotationEnabled = iconRotationEnabled
                                             )
                                         }
 
@@ -876,7 +928,9 @@ fun SettingsScreen(
                                             title = "Своя тема (JSON)",
                                             subtitle = "Настройка пользовательской темы JSON",
                                             onClick = { customJsonText = customThemeJson; showCustomUiDialog = true },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
                                     }
                                 }
@@ -897,7 +951,9 @@ fun SettingsScreen(
                                             ),
                                             selected = aspectRatioMode,
                                             onSelect = { viewModel.updateSetting("aspect_ratio_mode", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -911,7 +967,9 @@ fun SettingsScreen(
                                             ),
                                             selected = hardwareDecoder,
                                             onSelect = { viewModel.updateSetting("hardware_decoder", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -925,7 +983,9 @@ fun SettingsScreen(
                                             ),
                                             selected = bufferingLevel,
                                             onSelect = { viewModel.updateSetting("buffering_level", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -940,7 +1000,9 @@ fun SettingsScreen(
                                             ),
                                             selected = sleepMinutes.toString(),
                                             onSelect = { viewModel.sleepTimer.value = it.toIntOrNull() ?: 0 },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
                                     }
                                 }
@@ -953,7 +1015,9 @@ fun SettingsScreen(
                                             subtitle = "Имя плейлиста или имя сервера в строке информации",
                                             checked = showSource,
                                             onCheckedChange = { viewModel.updateSetting("show_source", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -962,7 +1026,9 @@ fun SettingsScreen(
                                             subtitle = "Разрешение видеопотока",
                                             checked = showResolution,
                                             onCheckedChange = { viewModel.updateSetting("show_resolution", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -971,7 +1037,9 @@ fun SettingsScreen(
                                             subtitle = "Частота кадров в секунду",
                                             checked = showFps,
                                             onCheckedChange = { viewModel.updateSetting("show_fps", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -980,7 +1048,9 @@ fun SettingsScreen(
                                             subtitle = "Тип видео и аудио кодека в плеере",
                                             checked = showCodecs,
                                             onCheckedChange = { viewModel.updateSetting("show_codecs", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -989,7 +1059,9 @@ fun SettingsScreen(
                                             subtitle = "Битрейт потока в килобитах",
                                             checked = showBitrate,
                                             onCheckedChange = { viewModel.updateSetting("show_bitrate", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -1002,7 +1074,9 @@ fun SettingsScreen(
                                             ),
                                             selected = resFormat,
                                             onSelect = { viewModel.updateSetting("resolution_format", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -1011,7 +1085,9 @@ fun SettingsScreen(
                                             subtitle = "Запускать воспроизведение при открытии приложения",
                                             checked = autoStartLast,
                                             onCheckedChange = { viewModel.updateSetting("auto_start_last", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -1020,7 +1096,9 @@ fun SettingsScreen(
                                             subtitle = "Фиксирует альбомный режим в плеере",
                                             checked = forceLandscape,
                                             onCheckedChange = { viewModel.updateSetting("force_landscape", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -1029,7 +1107,154 @@ fun SettingsScreen(
                                             subtitle = "Продолжать воспроизведение при сворачивании (PiP)",
                                             checked = backgroundPlayback,
                                             onCheckedChange = { viewModel.updateSetting("background_playback", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
+                                        )
+                                    }
+                                }
+                            }
+
+                            SettingsPage.WHEEL -> {
+                                item {
+                                    SettingsSection(title = "Модуль LSPosed и разблокировка") {
+                                        val isLspActive = LSPosedStatus.isModuleActive() || LSPosedStatus.isActive
+                                        ActionItem(
+                                            icon = Icons.Rounded.Extension,
+                                            title = "Состояние модуля LSPosed",
+                                            subtitle = if (isLspActive) "Модуль активен — ограничения Android Auto сняты" else "Модуль не активен — активируйте в LSPosed Manager",
+                                            onClick = {},
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
+                                        )
+                                    }
+                                }
+
+                                item {
+                                    SettingsSection(title = "Кнопки управления на руле") {
+                                        ChoiceItem(
+                                            icon = Icons.Rounded.SkipNext,
+                                            title = "Кнопка «Следующий трек» (Next)",
+                                            subtitle = "Действие при нажатии кнопки Next на руле",
+                                            options = listOf(
+                                                "NextChannel" to "Следующий канал",
+                                                "Skip10" to "Вперёд на 10 сек",
+                                                "Skip30" to "Вперёд на 30 сек",
+                                                "Skip60" to "Вперёд на 1 мин"
+                                            ),
+                                            selected = wheelNextAction,
+                                            onSelect = { viewModel.updateSetting("wheel_next_action", it) },
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
+                                        )
+
+                                        ChoiceItem(
+                                            icon = Icons.Rounded.SkipPrevious,
+                                            title = "Кнопка «Предыдущий трек» (Prev)",
+                                            subtitle = "Действие при нажатии кнопки Prev на руле",
+                                            options = listOf(
+                                                "PrevChannel" to "Предыдущий канал",
+                                                "Rewind10" to "Назад на 10 сек",
+                                                "Rewind30" to "Назад на 30 сек",
+                                                "Rewind60" to "Назад на 1 мин"
+                                            ),
+                                            selected = wheelPrevAction,
+                                            onSelect = { viewModel.updateSetting("wheel_prev_action", it) },
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
+                                        )
+
+                                        ChoiceItem(
+                                            icon = Icons.Rounded.KeyboardArrowUp,
+                                            title = "Кнопка «Канал вверх» (Channel Up)",
+                                            subtitle = "Действие при переключении каналов вверх на руле",
+                                            options = listOf(
+                                                "NextChannel" to "Следующий канал",
+                                                "PrevChannel" to "Предыдущий канал",
+                                                "Skip10" to "Вперёд на 10 сек"
+                                            ),
+                                            selected = wheelChannelUpAction,
+                                            onSelect = { viewModel.updateSetting("wheel_channel_up_action", it) },
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
+                                        )
+
+                                        ChoiceItem(
+                                            icon = Icons.Rounded.KeyboardArrowDown,
+                                            title = "Кнопка «Канал вниз» (Channel Down)",
+                                            subtitle = "Действие при переключении каналов вниз на руле",
+                                            options = listOf(
+                                                "PrevChannel" to "Предыдущий канал",
+                                                "NextChannel" to "Следующий канал",
+                                                "Rewind10" to "Назад на 10 сек"
+                                            ),
+                                            selected = wheelChannelDownAction,
+                                            onSelect = { viewModel.updateSetting("wheel_channel_down_action", it) },
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
+                                        )
+                                    }
+                                }
+
+                                item {
+                                    SettingsSection(title = "Параметры работы в авто") {
+                                        ToggleItem(
+                                            icon = Icons.Rounded.Fullscreen,
+                                            title = "Полноэкранный режим (без Google Карт)",
+                                            subtitle = "Занимать 100% площади экрана авто, скрывая раздельную панель Coolwalk",
+                                            checked = carFullscreenMode,
+                                            onCheckedChange = { viewModel.updateSetting("car_fullscreen_mode", it) },
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
+                                        )
+
+                                        ToggleItem(
+                                            icon = Icons.Rounded.PlayArrow,
+                                            title = "Автозапуск в авто",
+                                            subtitle = "Автоматически воспроизводить последний канал при подключении к автомобилю",
+                                            checked = autoStartLast,
+                                            onCheckedChange = { viewModel.updateSetting("auto_start_last", it) },
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
+                                        )
+
+                                        ToggleItem(
+                                            icon = Icons.Rounded.PictureInPicture,
+                                            title = "Фоновый звук в авто",
+                                            subtitle = "Продолжать воспроизведение звука при сворачивании плеера на магнитоле",
+                                            checked = backgroundPlayback,
+                                            onCheckedChange = { viewModel.updateSetting("background_playback", it) },
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
+                                        )
+                                    }
+                                }
+
+                                item {
+                                    SettingsSection(title = "Управление касаниями (OpenMirror)") {
+                                        val isTouchEnabled = com.kraftplay.openiptv.auto.TouchInjectionService.isEnabled()
+                                        ActionItem(
+                                            icon = Icons.Rounded.TouchApp,
+                                            title = "Специальные возможности (Тач-управление)",
+                                            subtitle = if (isTouchEnabled) "Доступ включен — нажатия с магнитолы работают" else "Включите OpenIPTV в Спец. возможностях для управления с экрана авто",
+                                            onClick = {
+                                                runCatching {
+                                                    context.startActivity(Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS).apply {
+                                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                                    })
+                                                }
+                                            },
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
                                     }
                                 }
@@ -1048,7 +1273,9 @@ fun SettingsScreen(
                                             ),
                                             selected = catDisplayMode,
                                             onSelect = { viewModel.setCategoryDisplayMode(it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -1061,7 +1288,9 @@ fun SettingsScreen(
                                             ),
                                             selected = groupSortOrder,
                                             onSelect = { viewModel.updateSetting("group_sort_order", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ChoiceItem(
@@ -1076,7 +1305,9 @@ fun SettingsScreen(
                                             ),
                                             selected = catchupMode,
                                             onSelect = { viewModel.updateSetting("catchup_mode", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ActionItem(
@@ -1084,7 +1315,9 @@ fun SettingsScreen(
                                             title = "Управление категориями",
                                             subtitle = "Скрытие и показ групп каналов",
                                             onClick = { showCategoryDialog = true },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ActionItem(
@@ -1092,7 +1325,9 @@ fun SettingsScreen(
                                             title = "Управление каналами",
                                             subtitle = "Скрытие отдельных каналов из списка",
                                             onClick = { showChannelDialog = true },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
                                     }
                                 }
@@ -1112,7 +1347,9 @@ fun SettingsScreen(
                                             ),
                                             selected = backBehavior,
                                             onSelect = { viewModel.updateSetting("back_behavior", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -1121,7 +1358,9 @@ fun SettingsScreen(
                                             subtitle = "Жесты свайпа для громкости и яркости",
                                             checked = volumeGestureEnabled,
                                             onCheckedChange = { viewModel.updateSetting("volume_gesture_enabled", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ToggleItem(
@@ -1130,7 +1369,9 @@ fun SettingsScreen(
                                             subtitle = "Скрывать прямые ссылки на плейлист в интерфейсе",
                                             checked = hidePlaylistUrl,
                                             onCheckedChange = { viewModel.updateSetting("hide_playlist_url", it) },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
                                     }
                                 }
@@ -1148,7 +1389,9 @@ fun SettingsScreen(
                                                 clipboardManager.setText(AnnotatedString(json))
                                                 Toast.makeText(context, tr("Резервная копия скопирована"), Toast.LENGTH_SHORT).show()
                                             },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ActionItem(
@@ -1156,7 +1399,9 @@ fun SettingsScreen(
                                             title = "Импорт настроек",
                                             subtitle = "Восстановить настройки из текста JSON",
                                             onClick = { showImportDialog = true },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ActionItem(
@@ -1164,20 +1409,9 @@ fun SettingsScreen(
                                             title = "Передача по Wi-Fi",
                                             subtitle = "Передача настроек между устройствами по локальной сети",
                                             onClick = { showWifiDeviceTransfer = true },
-                                            shapeName = badgeShape
-                                        )
-                                    }
-                                }
-
-                                item {
-                                    SettingsSection(title = "Состояние LSPosed и Android Auto") {
-                                        val isLspActive = LSPosedStatus.isActive
-                                        ActionItem(
-                                            icon = Icons.Rounded.Extension,
-                                            title = "Состояние LSPosed",
-                                            subtitle = if (isLspActive) "Модуль LSPosed активен" else "Модуль LSPosed не активен",
-                                            onClick = {},
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
                                     }
                                 }
@@ -1191,7 +1425,9 @@ fun SettingsScreen(
                                             title = "Telegram",
                                             subtitle = "Официальный канал и чат поддержки",
                                             onClick = { openExternalLink(context, "https://t.me/+IB-WMBTo7ZxkNmZi") },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ActionItem(
@@ -1199,7 +1435,9 @@ fun SettingsScreen(
                                             title = "GitHub",
                                             subtitle = "Исходный код проекта OpenIPTV",
                                             onClick = { openExternalLink(context, "https://github.com/redmi9cnfc/OpenIPTVApp") },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ActionItem(
@@ -1253,7 +1491,9 @@ fun SettingsScreen(
                                                     }
                                                 }
                                             },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ActionItem(
@@ -1261,15 +1501,19 @@ fun SettingsScreen(
                                             title = "Очистить данные приложения",
                                             subtitle = "Сброс всех сохраненных плейлистов и EPG",
                                             onClick = { viewModel.clearData() },
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
 
                                         ActionItem(
                                             icon = Icons.Rounded.Info,
-                                            title = "Версия 5.5",
+                                            title = tr("Версия {0}", "6.0"),
                                             subtitle = "OpenIPTV • Material You 3 Expressive",
                                             onClick = {},
-                                            shapeName = badgeShape
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
                                         )
                                     }
                                 }
@@ -1644,7 +1888,7 @@ fun PlaylistCard(
     onSettings: () -> Unit,
     onDelete: () -> Unit,
     badgeShape: String = "Cookie",
-    badgeColor: String = "Auto",
+    badgeColor: String = "Purple",
     iconRotationEnabled: Boolean = false
 ) {
     GroupItem(onClick = onSelect) {
@@ -1701,7 +1945,7 @@ fun EpgCard(
     onSettings: () -> Unit,
     onDelete: () -> Unit,
     badgeShape: String = "Cookie",
-    badgeColor: String = "Auto",
+    badgeColor: String = "Purple",
     iconRotationEnabled: Boolean = false
 ) {
     GroupItem {
@@ -1849,34 +2093,84 @@ fun AddDialog(
     onName: (String) -> Unit,
     onUrl: (String) -> Unit,
     onDismiss: () -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
+    isAuto: Boolean = false
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = onName,
-                    label = { Text(tr("Имя")) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = url,
-                    onValueChange = onUrl,
-                    label = { Text(tr("URL адрес")) },
-                    modifier = Modifier.fillMaxWidth()
-                )
+    if (isAuto) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.75f))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.92f)
+                    .padding(16.dp)
+                    .clickable(enabled = false, onClick = {}),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 8.dp
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(12.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = name,
+                            onValueChange = onName,
+                            label = { Text(tr("Имя")) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = url,
+                            onValueChange = onUrl,
+                            label = { Text(tr("URL адрес")) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    Spacer(Modifier.height(16.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss) { Text(tr("Отмена")) }
+                        Spacer(Modifier.width(8.dp))
+                        Button(onClick = onConfirm) { Text(tr("Добавить плейлист")) }
+                    }
+                }
             }
-        },
-        confirmButton = {
-            Button(onClick = onConfirm) { Text(tr("Добавить плейлист")) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(tr("Отмена")) }
         }
-    )
+    } else {
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(title) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = onName,
+                        label = { Text(tr("Имя")) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = url,
+                        onValueChange = onUrl,
+                        label = { Text(tr("URL адрес")) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = onConfirm) { Text(tr("Добавить плейлист")) }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) { Text(tr("Отмена")) }
+            }
+        )
+    }
 }
 
 private fun openExternalLink(context: Context, url: String) {

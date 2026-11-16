@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -76,10 +77,69 @@ fun getCategoryDisplayName(category: String): String {
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
+fun InPageDialog(
+    onDismissRequest: () -> Unit,
+    title: @Composable (() -> Unit)? = null,
+    text: @Composable (() -> Unit)? = null,
+    confirmButton: @Composable (() -> Unit)? = null,
+    dismissButton: @Composable (() -> Unit)? = null
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.75f))
+            .clickable(onClick = onDismissRequest),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .padding(16.dp)
+                .clickable(enabled = false, onClick = {}),
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 8.dp
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                if (title != null) {
+                    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+                        title()
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
+                if (text != null) {
+                    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                        text()
+                    }
+                    Spacer(Modifier.height(16.dp))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    dismissButton?.invoke()
+                    if (dismissButton != null && confirmButton != null) {
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    confirmButton?.invoke()
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@Composable
 fun MainScreen(
     viewModel: MainViewModel,
     onChannelClick: (IptvChannel) -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    isAuto: Boolean = false,
+    onYouTubeClick: (() -> Unit)? = null,
+    onRuTubeClick: (() -> Unit)? = null,
+    onBrowserClick: (() -> Unit)? = null,
+    onPrismaClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val channels by viewModel.filteredChannels.collectAsState()
@@ -95,6 +155,7 @@ fun MainScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val playlistError by viewModel.playlistError.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
+    var showCarKeyboardDialog by remember { mutableStateOf(false) }
     val fontSize by viewModel.fontSize.collectAsState()
     val showClock by viewModel.showClock.collectAsState()
     val hideUrl by viewModel.hidePlaylistUrl.collectAsState()
@@ -113,6 +174,8 @@ fun MainScreen(
     val badgeColor by viewModel.badgeColor.collectAsState()
     val expressiveGlow by viewModel.expressiveGlow.collectAsState()
     val ambientCanvas by viewModel.ambientCanvas.collectAsState()
+    val epgProgressStyle by viewModel.epgProgressStyle.collectAsState()
+    val iconRotationEnabled by viewModel.iconRotationEnabled.collectAsState()
     
     var currentTime by remember { mutableStateOf(SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())) }
     var isSearchExpanded by remember { mutableStateOf(false) }
@@ -229,9 +292,30 @@ fun MainScreen(
                         modifier = Modifier.horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (isEpgLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp).padding(4.dp), strokeWidth = 2.dp)
-                        IconButton(onClick = { isSearchExpanded = !isSearchExpanded }, modifier = Modifier.size(36.dp)) {
+                        if (isEpgLoading) ExpressiveLoadingIndicator(size = 28.dp, strokeWidth = 3.dp)
+                        IconButton(onClick = {
+                            if (isAuto) {
+                                showCarKeyboardDialog = true
+                            } else {
+                                isSearchExpanded = !isSearchExpanded
+                            }
+                        }, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Default.Search, stringResource(R.string.search), modifier = Modifier.size(20.dp))
+                        }
+                        IconButton(onClick = {
+                            com.kraftplay.openiptv.util.VoiceInputHelper.startSpeechRecognition(
+                                context = context,
+                                onResult = { query ->
+                                    isSearchExpanded = true
+                                    viewModel.updateSearchQuery(query)
+                                }
+                            )
+                        }, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.Mic,
+                                contentDescription = "Voice Search",
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
                         IconButton(onClick = {
                             val nextMode = if (categoryDisplayMode == "Chips") "Folders" else "Chips"
@@ -247,6 +331,36 @@ fun MainScreen(
                             viewModel.refreshAllEpg()
                         }) {
                             Icon(Icons.Default.Refresh, "Refresh", modifier = Modifier.size(20.dp))
+                        }
+                        if (isAuto && onYouTubeClick != null) {
+                            IconButton(onClick = onYouTubeClick, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Default.PlayCircle,
+                                    contentDescription = "YouTube",
+                                    tint = androidx.compose.ui.graphics.Color(0xFFFF0000),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        if (isAuto && onRuTubeClick != null) {
+                            IconButton(onClick = onRuTubeClick, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Default.OndemandVideo,
+                                    contentDescription = "RuTube",
+                                    tint = androidx.compose.ui.graphics.Color(0xFF00A2E8),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        if (isAuto && onBrowserClick != null) {
+                            IconButton(onClick = onBrowserClick, modifier = Modifier.size(36.dp)) {
+                                Icon(
+                                    imageVector = androidx.compose.material.icons.Icons.Default.Public,
+                                    contentDescription = "Browser",
+                                    tint = androidx.compose.ui.graphics.Color(0xFF4285F4),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
                         }
                         IconButton(onClick = onSettingsClick, modifier = Modifier.size(36.dp)) {
                             Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings), modifier = Modifier.size(20.dp))
@@ -335,7 +449,9 @@ fun MainScreen(
 
                             val handleChipClick = {
                                 if (!isLongPressHandled) {
-                                    if (isFolderLocked) {
+                                    if (category == "Prisma") {
+                                        if (onPrismaClick != null) onPrismaClick()
+                                    } else if (isFolderLocked) {
                                         showFolderPasswordPrompt = category
                                     } else {
                                         viewModel.selectCategory(category)
@@ -351,6 +467,7 @@ fun MainScreen(
                                     when(category) {
                                         "Favorites" -> Icon(Icons.Default.Favorite, null, modifier = Modifier.size(16.dp))
                                         "Recent" -> Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp))
+                                        "Prisma" -> Icon(Icons.Default.Public, null, modifier = Modifier.size(16.dp), tint = Color(0xFF4285F4))
                                     }
                                 },
                                 trailingIcon = if (isFolderLocked) {
@@ -414,7 +531,7 @@ fun MainScreen(
                     }
 
                     if (isLoading) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { ExpressiveLoadingIndicator(size = 72.dp) }
                     } else {
                         val gridColumns = channelGridCells(listSize)
                         LazyVerticalGrid(
@@ -433,6 +550,7 @@ fun MainScreen(
                                     fontSize = fontSize,
                                     listSize = listSize,
                                     uiStyle = uiStyle,
+                                    epgProgressStyle = epgProgressStyle,
                                     channelNumber = if (showChannelNumbers) index + 1 else null,
                                     cornerRadius = cardCornerRadius,
                                     scaleIntensity = springScale,
@@ -461,7 +579,21 @@ fun MainScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            items(visibleCategories) { category ->
+                            item {
+                                CategoryFolderCard(
+                                    title = "Prisma",
+                                    count = 1,
+                                    uiStyle = uiStyle,
+                                    isLocked = false,
+                                    onClick = {
+                                        if (onPrismaClick != null) {
+                                            onPrismaClick()
+                                        }
+                                    },
+                                    onLongClick = {}
+                                )
+                            }
+                            items(visibleCategories.filter { it != "Prisma" }) { category ->
                                 val count = categoryCounts[category] ?: 0
                                 val isFolderLocked = viewModel.isFolderLocked(category)
                                 CategoryFolderCard(
@@ -516,6 +648,7 @@ fun MainScreen(
                                     fontSize = fontSize,
                                     listSize = listSize,
                                     uiStyle = uiStyle,
+                                    epgProgressStyle = epgProgressStyle,
                                     channelNumber = if (showChannelNumbers) index + 1 else null,
                                     cornerRadius = cardCornerRadius,
                                     scaleIntensity = springScale,
@@ -550,7 +683,8 @@ fun MainScreen(
             onConfirm = {
                 viewModel.addPlaylist(tempPlaylistName, tempPlaylistUrl)
                 showAddPlaylistDialog = false
-            }
+            },
+            isAuto = isAuto
         )
     }
 
@@ -563,11 +697,11 @@ fun MainScreen(
         val searchResults by viewModel.searchEpgPrograms(epgQuery).collectAsState(emptyList())
         val timeFormat = SimpleDateFormat("HH:mm, dd MMM", Locale.getDefault())
 
-        AlertDialog(
+        InPageDialog(
             onDismissRequest = { showEpgSearchDialog = false },
-            title = { Text(stringResource(R.string.epg_search)) },
+            title = { Text(stringResource(R.string.epg_search), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium) },
             text = {
-                Column(modifier = Modifier.fillMaxWidth().height(400.dp)) {
+                Column(modifier = Modifier.fillMaxWidth().height(350.dp)) {
                     TextField(
                         value = epgQuery,
                         onValueChange = { epgQuery = it },
@@ -629,9 +763,12 @@ fun MainScreen(
             delay(700)
             ignoreLongPressRelease = false
         }
-        Dialog(
-            onDismissRequest = { showChannelMenu = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.75f))
+                .clickable { showChannelMenu = null },
+            contentAlignment = Alignment.Center
         ) {
             Surface(
                 shape = RoundedCornerShape(28.dp),
@@ -640,6 +777,7 @@ fun MainScreen(
                 modifier = Modifier
                     .width(340.dp)
                     .padding(16.dp)
+                    .clickable(enabled = false, onClick = {})
                     .onPreviewKeyEvent { event ->
                         val keyCode = event.nativeKeyEvent.keyCode
                         val isConfirm = keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
@@ -670,7 +808,8 @@ fun MainScreen(
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             size = 44.dp,
                             shapeName = badgeShape,
-                            badgeColorName = badgeColor
+                            badgeColorName = badgeColor,
+                            rotationEnabled = iconRotationEnabled
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -700,13 +839,15 @@ fun MainScreen(
                         onClick = { viewModel.toggleFavorite(channel.url); showChannelMenu = null },
                         icon = if (channel.isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         text = if (channel.isFavorite) stringResource(R.string.remove_from_favorites) else stringResource(R.string.add_to_favorites),
-                        shapeName = badgeShape
+                        shapeName = badgeShape,
+                        badgeColorName = badgeColor
                     )
                     TvMenuItem(
                         onClick = { viewModel.togglePinChannel(channel.url); showChannelMenu = null },
                         icon = Icons.Default.PushPin,
                         text = if (channel.isPinned) stringResource(R.string.unpin_channel) else stringResource(R.string.pin_channel),
-                        shapeName = badgeShape
+                        shapeName = badgeShape,
+                        badgeColorName = badgeColor
                     )
                     TvMenuItem(
                         onClick = { 
@@ -719,34 +860,39 @@ fun MainScreen(
                         },
                         icon = if (channel.isLocked) Icons.Default.LockOpen else Icons.Default.Lock,
                         text = if (channel.isLocked) stringResource(R.string.unlock_channel) else stringResource(R.string.lock_channel),
-                        shapeName = badgeShape
+                        shapeName = badgeShape,
+                        badgeColorName = badgeColor
                     )
                     if (channel.isLocked) {
                         TvMenuItem(
                             onClick = { showPasswordDialog = Triple(channel, "change_step1", ""); showChannelMenu = null },
                             icon = Icons.Default.Password,
                             text = stringResource(R.string.change_password),
-                            shapeName = badgeShape
+                            shapeName = badgeShape,
+                            badgeColorName = badgeColor
                         )
                     }
                     TvMenuItem(
                         onClick = { showMoveChannelDialog = channel; showChannelMenu = null },
                         icon = Icons.Default.SwapVert,
                         text = tr("Передвинуть канал"),
-                        shapeName = badgeShape
+                        shapeName = badgeShape,
+                        badgeColorName = badgeColor
                     )
                     TvMenuItem(
                         onClick = { showEpgSchedule = channel; showChannelMenu = null },
                         icon = Icons.Default.List,
                         text = "Full Schedule",
-                        shapeName = badgeShape
+                        shapeName = badgeShape,
+                        badgeColorName = badgeColor
                     )
                     Spacer(Modifier.height(4.dp))
                     TvMenuItem(
                         onClick = { showChannelMenu = null },
                         icon = Icons.Default.Close,
                         text = stringResource(R.string.close),
-                        shapeName = badgeShape
+                        shapeName = badgeShape,
+                        badgeColorName = badgeColor
                     )
                 }
             }
@@ -961,9 +1107,12 @@ fun MainScreen(
             ignoreLongPressRelease = false
         }
 
-        Dialog(
-            onDismissRequest = { showFolderMenu = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.75f))
+                .clickable { showFolderMenu = null },
+            contentAlignment = Alignment.Center
         ) {
             Surface(
                 shape = RoundedCornerShape(28.dp),
@@ -972,6 +1121,7 @@ fun MainScreen(
                 modifier = Modifier
                     .width(340.dp)
                     .padding(16.dp)
+                    .clickable(enabled = false, onClick = {})
                     .onPreviewKeyEvent { event ->
                         val keyCode = event.nativeKeyEvent.keyCode
                         val isConfirm = keyCode == KeyEvent.KEYCODE_DPAD_CENTER ||
@@ -996,7 +1146,8 @@ fun MainScreen(
                             contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                             size = 44.dp,
                             shapeName = badgeShape,
-                            badgeColorName = badgeColor
+                            badgeColorName = badgeColor,
+                            rotationEnabled = iconRotationEnabled
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -1026,7 +1177,8 @@ fun MainScreen(
                         },
                         icon = Icons.Default.SwapVert,
                         text = tr("Передвинуть категорию"),
-                        shapeName = badgeShape
+                        shapeName = badgeShape,
+                        badgeColorName = badgeColor
                     )
 
                     TvMenuItem(
@@ -1041,7 +1193,8 @@ fun MainScreen(
                         },
                         icon = if (isLocked) Icons.Default.LockOpen else Icons.Default.Lock,
                         text = if (isLocked) tr("Снять пароль с папки") else tr("Запаролить папку"),
-                        shapeName = badgeShape
+                        shapeName = badgeShape,
+                        badgeColorName = badgeColor
                     )
 
                     TvMenuItem(
@@ -1051,7 +1204,8 @@ fun MainScreen(
                         },
                         icon = Icons.Default.VisibilityOff,
                         text = tr("Скрыть категорию"),
-                        shapeName = badgeShape
+                        shapeName = badgeShape,
+                        badgeColorName = badgeColor
                     )
 
                     Spacer(Modifier.height(4.dp))
@@ -1059,7 +1213,8 @@ fun MainScreen(
                         onClick = { showFolderMenu = null },
                         icon = Icons.Default.Close,
                         text = tr("Закрыть"),
-                        shapeName = badgeShape
+                        shapeName = badgeShape,
+                        badgeColorName = badgeColor
                     )
                 }
             }
@@ -1208,6 +1363,17 @@ fun MainScreen(
             }
         )
     }
+
+    if (showCarKeyboardDialog) {
+        CarOnScreenKeyboardDialog(
+            initialText = searchQuery,
+            onDismiss = { showCarKeyboardDialog = false },
+            onConfirm = { query ->
+                isSearchExpanded = true
+                viewModel.updateSearchQuery(query)
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1317,7 +1483,7 @@ fun TvMenuItem(
     text: String,
     modifier: Modifier = Modifier,
     shapeName: String = "Cookie",
-    badgeColorName: String = "Auto",
+    badgeColorName: String = "Purple",
     rotationEnabled: Boolean = false
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -1370,7 +1536,7 @@ fun TvMenuItem(
                 size = 36.dp,
                 shapeName = shapeName,
                 badgeColorName = badgeColorName,
-                rotationEnabled = rotationEnabled || isFocused
+                rotationEnabled = rotationEnabled
             )
             Text(
                 text = text,
@@ -1407,6 +1573,7 @@ fun ChannelCard(
     fontSize: Float,
     listSize: String,
     uiStyle: String,
+    epgProgressStyle: String = "Wavy",
     channelNumber: Int? = null,
     cornerRadius: Int = 22,
     scaleIntensity: Float = 1.08f,
@@ -1533,10 +1700,13 @@ fun ChannelCard(
                         modifier = Modifier.fillMaxSize().padding(8.dp),
                         contentScale = ContentScale.Fit
                     )
-                    val hasCatchup = !channel.catchupSource.isNullOrBlank() ||
-                        (!channel.catchup.isNullOrBlank() &&
-                         !channel.catchup.equals("none", true) &&
-                         !channel.catchup.equals("0", true))
+                    val chCatchup = channel.catchup?.trim()?.lowercase(Locale.ROOT)
+                    val isExplicitlyDisabled = chCatchup == "none" || chCatchup == "0" || chCatchup == "false"
+                    val hasCatchup = !isExplicitlyDisabled && (
+                        !channel.catchupSource.isNullOrBlank() ||
+                        !channel.catchup.isNullOrBlank() ||
+                        (channel.catchupDays != null && channel.catchupDays > 0)
+                    )
                     if (hasCatchup) {
                         Surface(
                             modifier = Modifier.align(Alignment.TopStart).padding(4.dp).size(18.dp),
@@ -1584,9 +1754,10 @@ fun ChannelCard(
                         color = Color.Gray
                     )
                     
-                    LinearProgressIndicator(
+                    EpgProgressBar(
                         progress = progress.coerceIn(0f, 1f),
-                        modifier = Modifier.fillMaxWidth().height(2.dp).padding(vertical = 2.dp),
+                        style = epgProgressStyle,
+                        modifier = Modifier.fillMaxWidth().height(6.dp).padding(vertical = 1.dp),
                         color = MaterialTheme.colorScheme.primary,
                         trackColor = MaterialTheme.colorScheme.surfaceVariant
                     )

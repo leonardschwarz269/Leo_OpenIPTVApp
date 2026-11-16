@@ -3,28 +3,42 @@ package com.kraftplay.openiptv.parser
 import android.util.Xml
 import com.kraftplay.openiptv.model.EpgProgram
 import org.xmlpull.v1.XmlPullParser
+import java.io.BufferedInputStream
 import java.io.InputStream
-import java.text.SimpleDateFormat
 import java.util.*
 import java.util.zip.GZIPInputStream
 
 object XmlTvParser {
 
+    private val utcCalendarThreadLocal = ThreadLocal.withInitial {
+        Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { isLenient = false }
+    }
+
     suspend fun parseStreaming(
         inputStream: InputStream,
         isGzipped: Boolean = false,
-        cutoffTime: Long = System.currentTimeMillis() - 30L * 24L * 60L * 60L * 1000L,
-        futureLimit: Long = System.currentTimeMillis() + 30L * 24L * 60L * 60L * 1000L,
+        cutoffTime: Long = 0L,
+        futureLimit: Long = Long.MAX_VALUE,
         onChannelNamesParsed: (suspend (Map<String, List<String>>) -> Unit)? = null,
         onBatchReady: suspend (List<EpgProgram>) -> Unit
     ) {
-        val stream = if (isGzipped) {
-            try { GZIPInputStream(inputStream) } catch (e: Exception) { inputStream }
-        } else inputStream
+        val bis = if (inputStream is BufferedInputStream) inputStream else BufferedInputStream(inputStream, 64 * 1024)
+        val stream: InputStream = if (isGzipped) {
+            try {
+                bis.mark(64 * 1024)
+                GZIPInputStream(bis)
+            } catch (e: Exception) {
+                runCatching { bis.reset() }
+                bis
+            }
+        } else {
+            bis
+        }
 
         val batch = mutableListOf<EpgProgram>()
         val channelNames = mutableMapOf<String, List<String>>()
-        val maxBatchSize = 1000
+        val maxBatchSize = 5000
+        var channelNamesDelivered = false
 
         try {
             val parser = Xml.newPullParser()
@@ -36,7 +50,7 @@ object XmlTvParser {
                 if (eventType == XmlPullParser.START_TAG) {
                     when (parser.name) {
                         "channel" -> {
-                            val channelId = parser.getAttributeValue(null, "id") ?: ""
+                            val channelId = parser.getAttributeValue(null, "id")?.trim().orEmpty()
                             val names = mutableListOf<String>()
                             var event = parser.next()
                             while (!(event == XmlPullParser.END_TAG && parser.name == "channel")) {
@@ -51,14 +65,15 @@ object XmlTvParser {
                                 event = parser.next()
                             }
                             if (channelId.isNotBlank() && names.isNotEmpty()) {
-                                channelNames[channelId.trim().lowercase(Locale.ROOT)] = names
+                                channelNames[channelId.lowercase(Locale.ROOT)] = names
                             }
                         }
                         "programme" -> {
-                            if (channelNames.isNotEmpty() && onChannelNamesParsed != null) {
+                            if (!channelNamesDelivered && channelNames.isNotEmpty() && onChannelNamesParsed != null) {
+                                channelNamesDelivered = true
                                 onChannelNamesParsed(HashMap(channelNames))
                             }
-                            val channelId = parser.getAttributeValue(null, "channel") ?: ""
+                            val channelId = parser.getAttributeValue(null, "channel")?.trim().orEmpty()
                             val startStr = parser.getAttributeValue(null, "start")
                             val stopStr = parser.getAttributeValue(null, "stop")
 
@@ -90,13 +105,13 @@ object XmlTvParser {
                             if (startTime != null && endTime != null && endTime > cutoffTime && startTime < futureLimit && title.isNotEmpty() && channelId.isNotEmpty()) {
                                 batch.add(
                                     EpgProgram(
-                                        channelId = channelId.trim(),
+                                        channelId = channelId,
                                         title = title.trim(),
                                         startTime = startTime,
                                         endTime = endTime,
-                                        description = if (desc.isBlank()) null else desc.trim(),
-                                        category = if (category.isBlank()) null else category.trim(),
-                                        iconUrl = if (icon.isBlank()) null else icon.trim()
+                                        description = desc.ifBlank { null }?.trim(),
+                                        category = category.ifBlank { null }?.trim(),
+                                        iconUrl = icon.ifBlank { null }?.trim()
                                     )
                                 )
                                 if (batch.size >= maxBatchSize) {
@@ -109,7 +124,7 @@ object XmlTvParser {
                 }
                 eventType = parser.next()
             }
-            if (channelNames.isNotEmpty() && onChannelNamesParsed != null) {
+            if (!channelNamesDelivered && channelNames.isNotEmpty() && onChannelNamesParsed != null) {
                 onChannelNamesParsed(channelNames)
             }
             if (batch.isNotEmpty()) {
@@ -119,7 +134,7 @@ object XmlTvParser {
         } catch (e: Exception) {
             e.printStackTrace()
         } finally {
-            try { stream.close() } catch (e: Exception) {}
+            runCatching { stream.close() }
         }
     }
 
@@ -169,49 +184,25 @@ object XmlTvParser {
                 val minute = clean.substring(10, 12).toInt()
                 val second = clean.substring(12, 14).toInt()
 
-                val cal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-                    isLenient = false
-                    clear()
-                }
+                val cal = utcCalendarThreadLocal.get()!!
+                cal.clear()
                 cal.set(year, month, day, hour, minute, second)
-                cal.set(Calendar.MILLISECOND, 0)
 
                 var millis = cal.timeInMillis
 
                 val rest = clean.substring(14).trim()
-                if (rest.isNotEmpty()) {
-                    if (rest.startsWith("+") || rest.startsWith("-")) {
-                        val sign = if (rest.startsWith("+")) -1 else 1
-                        val offsetStr = rest.substring(1).replace(":", "")
-                        if (offsetStr.length >= 4) {
-                            val offsetHours = offsetStr.substring(0, 2).toIntOrNull() ?: 0
-                            val offsetMins = offsetStr.substring(2, 4).toIntOrNull() ?: 0
-                            val totalOffsetMs = (offsetHours * 3600 + offsetMins * 60) * 1000L * sign
-                            millis += totalOffsetMs
-                        }
+                if (rest.isNotEmpty() && (rest.startsWith("+") || rest.startsWith("-"))) {
+                    val sign = if (rest.startsWith("+")) -1 else 1
+                    val offsetStr = rest.substring(1).replace(":", "")
+                    if (offsetStr.length >= 4) {
+                        val offsetHours = offsetStr.substring(0, 2).toIntOrNull() ?: 0
+                        val offsetMins = offsetStr.substring(2, 4).toIntOrNull() ?: 0
+                        millis += (offsetHours * 3600 + offsetMins * 60) * 1000L * sign
                     }
                 }
                 return millis
             } catch (e: Exception) { }
         }
-
-        val formats = listOf(
-            "yyyyMMddHHmmss Z",
-            "yyyyMMddHHmmss",
-            "yyyy-MM-dd HH:mm:ss",
-            "yyyy-MM-dd'T'HH:mm:ss'Z'",
-            "yyyy-MM-dd'T'HH:mm:ssZ"
-        )
-
-        for (format in formats) {
-            try {
-                val sdf = SimpleDateFormat(format, Locale.US)
-                sdf.timeZone = TimeZone.getTimeZone("UTC")
-                val d = sdf.parse(clean)
-                if (d != null) return d.time
-            } catch (e: Exception) { }
-        }
-
         return null
     }
 }

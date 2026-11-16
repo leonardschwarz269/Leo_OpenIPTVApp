@@ -1,8 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- LSPosed scope: хуким Android Auto (Gearhead) + само приложение (для индикатора модуля) -->
+<!-- LSPosed scope: хуким Android Auto (Gearhead) + Google Play Services (GMS) + Google Play Store + Chrome + Maps + само приложение -->
 <resources>
     <string-array name="xposed_scope">
         <item>com.google.android.projection.gearhead</item>
+        <item>com.google.android.gms</item>
+        <item>com.android.vending</item>
+        <item>com.android.chrome</item>
+        <item>com.google.android.apps.maps</item>
         <item>com.kraftplay.openiptv</item>
     </string-array>
 </resources>

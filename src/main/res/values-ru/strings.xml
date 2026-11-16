@@ -1,5 +1,8 @@
 <resources>
     <string name="app_name">OpenIPTV</string>
+    <string name="app_name_auto">OpenAUTO</string>
+    <string name="app_name_audio">OpenAUDIO</string>
+    <string name="app_name_mirror">OpenMirror</string>
     <string name="settings">Настройки</string>
     <string name="playlists">Плейлисты</string>
     <string name="add_playlist">Добавить плейлист</string>

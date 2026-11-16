@@ -44,20 +44,82 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val cacheFile = File(application.cacheDir, "channels_cache.json")
     private val epgDao = EpgDatabase.getDatabase(application).epgDao()
     
-    private val defaultKitTvUrl = ""
-    private val defaultKitTvPlaylist = Playlist(
-        id = "kittv-default",
-        name = "KitTV",
-        url = defaultKitTvUrl,
-        isSelected = true,
-        autoUpdateInterval = "On launch"
+    private val defaultPlaylists = listOf(
+        Playlist(
+            id = "kittv-default",
+            name = "KitTV (Россия)",
+            url = "https://ngrch.github.io/iptv/ru.m3u",
+            isSelected = true,
+            autoUpdateInterval = "On launch"
+        ),
+        Playlist(
+            id = "dimonovich-tv",
+            name = "Dimonovich (ТВ)",
+            url = "https://raw.githubusercontent.com/Dimonovich/TV/refs/heads/Dimonovich/FREE/TV",
+            isSelected = false,
+            autoUpdateInterval = "On launch"
+        ),
+        Playlist(
+            id = "dimonovich-films",
+            name = "Dimonovich (Фильмы)",
+            url = "https://raw.githubusercontent.com/Dimonovich/TV/refs/heads/Dimonovich/FREE/FILMS.m3u",
+            isSelected = false,
+            autoUpdateInterval = "On launch"
+        ),
+        Playlist(
+            id = "dimonovich-radio",
+            name = "Dimonovich (Радио)",
+            url = "https://raw.githubusercontent.com/Dimonovich/TV/refs/heads/Dimonovich/FREE/RADIO.m3u",
+            isSelected = false,
+            autoUpdateInterval = "On launch"
+        ),
+        Playlist(
+            id = "smolnp-main",
+            name = "smolnp (Основной)",
+            url = "https://raw.githubusercontent.com/smolnp/IPTVru/refs/heads/gh-pages/IPTVru.m3u",
+            isSelected = false,
+            autoUpdateInterval = "On launch"
+        ),
+        Playlist(
+            id = "smolnp-stable",
+            name = "smolnp (Стабильный)",
+            url = "https://raw.githubusercontent.com/smolnp/IPTVru/refs/heads/gh-pages/IPTVstable.m3u8",
+            isSelected = false,
+            autoUpdateInterval = "On launch"
+        ),
+        Playlist(
+            id = "smolnp-mir",
+            name = "smolnp (Мировой)",
+            url = "https://raw.githubusercontent.com/smolnp/IPTVru/refs/heads/gh-pages/IPTVmir.m3u8",
+            isSelected = false,
+            autoUpdateInterval = "On launch"
+        ),
+        Playlist(
+            id = "ngrch-music",
+            name = "ngrch (Музыка)",
+            url = "https://ngrch.github.io/iptv/music.m3u",
+            isSelected = false,
+            autoUpdateInterval = "On launch"
+        ),
+        Playlist(
+            id = "ngrch-cartoons",
+            name = "ngrch (Мультфильмы)",
+            url = "https://ngrch.github.io/iptv/cartoons.m3u",
+            isSelected = false,
+            autoUpdateInterval = "On launch"
+        )
     )
+
     private val _playlists = MutableStateFlow(
-        loadPlaylistsFromPrefs().ifEmpty { listOf(defaultKitTvPlaylist) }.map { playlist ->
-            // Repair the built-in playlist even when an older app version saved a stale URL/name.
-            if (playlist.id == "kittv-default" || playlist.name.equals("KitTV", true)) {
-                playlist.copy(id = if (playlist.id.isBlank()) "kittv-default" else playlist.id, name = "KitTV", url = defaultKitTvUrl)
-            } else playlist
+        run {
+            val loaded = loadPlaylistsFromPrefs()
+            if (loaded.isEmpty()) {
+                defaultPlaylists
+            } else {
+                val existingUrls = loaded.map { it.url.lowercase().trim() }.toSet()
+                val missingDefaults = defaultPlaylists.filter { it.url.lowercase().trim() !in existingUrls }
+                loaded + missingDefaults
+            }
         }
     )
     val playlists: StateFlow<List<Playlist>> = _playlists
@@ -108,6 +170,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var epgDataMap: Map<String, List<EpgProgram>> = emptyMap()
     private var epgCleanNameMap: Map<String, List<EpgProgram>> = emptyMap()
     private var epgTranslitNameMap: Map<String, List<EpgProgram>> = emptyMap()
+    private val xmlTvChannelNamesMap = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
 
     private val _epgPrograms = MutableStateFlow<List<EpgProgram>>(emptyList())
     val epgPrograms: StateFlow<List<EpgProgram>> = _epgPrograms
@@ -151,7 +214,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val showBitrate = MutableStateFlow(prefs.getBoolean("show_bitrate", false))
     val resolutionFormat = MutableStateFlow(prefs.getString("resolution_format", "Dimensions") ?: "Dimensions")
     val badgeShape = MutableStateFlow(prefs.getString("badge_shape", "Cookie") ?: "Cookie")
-    val badgeColor = MutableStateFlow(prefs.getString("badge_color", "Auto") ?: "Auto")
+    val badgeColor = MutableStateFlow(prefs.getString("badge_color", "Purple") ?: "Purple")
     val panelColor = MutableStateFlow(prefs.getString("panel_color", "Auto") ?: "Auto")
 
     val expressiveGlow = MutableStateFlow(prefs.getBoolean("expressive_glow", true))
@@ -168,6 +231,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val lastChannelUrl = MutableStateFlow(prefs.getString("last_channel_url", "") ?: "")
     val forceLandscape = MutableStateFlow(prefs.getBoolean("force_landscape", false))
     val backgroundPlayback = MutableStateFlow(prefs.getBoolean("background_playback", false))
+    val carFullscreenMode = MutableStateFlow(prefs.getBoolean("car_fullscreen_mode", true))
     val autoHideTimeout = MutableStateFlow(prefs.getInt("auto_hide_timeout", 3))
     val bufferingLevel = MutableStateFlow(prefs.getString("buffering_level", "Standard") ?: "Standard")
     val backBehavior = MutableStateFlow(prefs.getString("back_behavior", "Back to list") ?: "Back to list")
@@ -184,23 +248,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val playbackSpeed = MutableStateFlow(1.0f)
     val audioVolumeBoost = MutableStateFlow(1.0f)
 
-    val iconRotationEnabled = MutableStateFlow(prefs.getBoolean("icon_rotation_enabled", true))
+    val iconRotationEnabled = MutableStateFlow(prefs.getBoolean("icon_rotation_enabled", false))
+    val wheelNextAction = MutableStateFlow(prefs.getString("wheel_next_action", "NextChannel") ?: "NextChannel")
+    val wheelPrevAction = MutableStateFlow(prefs.getString("wheel_prev_action", "PrevChannel") ?: "PrevChannel")
+    val wheelChannelUpAction = MutableStateFlow(prefs.getString("wheel_channel_up_action", "NextChannel") ?: "NextChannel")
+    val wheelChannelDownAction = MutableStateFlow(prefs.getString("wheel_channel_down_action", "PrevChannel") ?: "PrevChannel")
     val lockedFolders = MutableStateFlow<Map<String, String>>(loadLockedFoldersFromPrefs())
     val customCategoryOrder = MutableStateFlow<List<String>>(loadCustomCategoryOrderFromPrefs())
     val customChannelOrder = MutableStateFlow<List<String>>(loadCustomChannelOrderFromPrefs())
 
     val categories: StateFlow<List<String>> = combine(_rawChannels, groupSortOrder, _hiddenCategories, customCategoryOrder) { channels, sortOrder, hidden, customOrder ->
-        val cats = channels.mapNotNull { it.category }.filter { it.isNotEmpty() }.distinct()
+        val cats = channels.mapNotNull { it.category }.filter { it.isNotEmpty() && !it.equals("Prisma", true) }.distinct()
         val orderMap = customOrder.withIndex().associate { it.value to it.index }
         val sortedCats = if (sortOrder == "Alphabetical") cats.sorted() else cats.sortedBy { orderMap[it] ?: Int.MAX_VALUE }
-        listOf("All", "Favorites", "Recent") + sortedCats
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("All", "Favorites", "Recent"))
+        listOf("All", "Favorites", "Recent", "Prisma") + sortedCats
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("All", "Favorites", "Recent", "Prisma"))
 
     val categoryChannelCounts: StateFlow<Map<String, Int>> = combine(_rawChannels, _favorites, _recentChannels) { channels, favs, recents ->
         val counts = mutableMapOf<String, Int>()
         counts["All"] = channels.size
         counts["Favorites"] = channels.count { favs.contains(it.url) }
         counts["Recent"] = recents.size
+        counts["Prisma"] = 1
         channels.forEach { channel ->
             val cat = channel.category
             if (!cat.isNullOrEmpty()) {
@@ -463,9 +532,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putString("category_display_mode", mode).apply()
     }
 
+    private fun saveXmlTvChannelNamesToPrefs() {
+        try {
+            val json = Json.encodeToString(xmlTvChannelNamesMap.toMap())
+            prefs.edit().putString("xmltv_channel_names_json", json).apply()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun loadXmlTvChannelNamesFromPrefs() {
+        try {
+            val json = prefs.getString("xmltv_channel_names_json", null) ?: return
+            val map: Map<String, List<String>> = Json.decodeFromString(json)
+            xmlTvChannelNamesMap.putAll(map)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun loadEpgFromDatabase() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                loadXmlTvChannelNamesFromPrefs()
                 val now = System.currentTimeMillis()
                 epgDao.pruneWindow(now - 30L * 24L * 60L * 60L * 1000L, now + 30L * 24L * 60L * 60L * 1000L)
                 val cached = epgDao.getAllValidPrograms(now)
@@ -478,43 +567,65 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private val xmlTvChannelNamesMap = java.util.concurrent.ConcurrentHashMap<String, List<String>>()
-
     private suspend fun processLoadedEpg(programs: List<EpgProgram>) = withContext(Dispatchers.Default) {
         val exactMap = mutableMapOf<String, MutableList<EpgProgram>>()
         val cleanMap = mutableMapOf<String, MutableList<EpgProgram>>()
         val translitMap = mutableMapOf<String, MutableList<EpgProgram>>()
 
+        val cleanCache = HashMap<String, String>()
+        val translitCache = HashMap<String, String>()
+
+        fun getClean(s: String): String = cleanCache.getOrPut(s) { EpgMatcher.cleanName(s) }
+        fun getTranslit(s: String): String = translitCache.getOrPut(s) { EpgMatcher.transliterate(s) }
+
+        val precomputedDisplayKeys = HashMap<String, List<Pair<String, Pair<String, String>>>>()
+        xmlTvChannelNamesMap.forEach { (exactId, names) ->
+            val keyPairs = names.mapNotNull { name ->
+                val exactNameKey = name.lowercase(Locale.ROOT).trim()
+                val cKey = getClean(name)
+                val tKey = if (cKey.isNotEmpty()) getTranslit(cKey) else ""
+                if (exactNameKey.isNotEmpty() || cKey.isNotEmpty()) {
+                    exactNameKey to (cKey to tKey)
+                } else null
+            }
+            if (keyPairs.isNotEmpty()) {
+                precomputedDisplayKeys[exactId] = keyPairs
+            }
+        }
+
         programs.forEach { prog ->
-            val exactKey = prog.channelId.lowercase().trim()
+            val exactKey = prog.channelId.lowercase(Locale.ROOT).trim()
             if (exactKey.isNotEmpty()) {
                 exactMap.getOrPut(exactKey) { mutableListOf() }.add(prog)
-            }
-            val cleanKey = EpgMatcher.cleanName(prog.channelId)
-            if (cleanKey.isNotEmpty()) {
-                cleanMap.getOrPut(cleanKey) { mutableListOf() }.add(prog)
-                val translitKey = EpgMatcher.transliterate(cleanKey)
-                if (translitKey.isNotEmpty()) {
-                    translitMap.getOrPut(translitKey) { mutableListOf() }.add(prog)
-                }
-            }
 
-            val displayNames = xmlTvChannelNamesMap[exactKey]
-            displayNames?.forEach { name ->
-                val cKey = EpgMatcher.cleanName(name)
-                if (cKey.isNotEmpty()) {
-                    cleanMap.getOrPut(cKey) { mutableListOf() }.add(prog)
-                    val tKey = EpgMatcher.transliterate(cKey)
-                    if (tKey.isNotEmpty()) {
-                        translitMap.getOrPut(tKey) { mutableListOf() }.add(prog)
+                val cleanKey = getClean(exactKey)
+                if (cleanKey.isNotEmpty()) {
+                    cleanMap.getOrPut(cleanKey) { mutableListOf() }.add(prog)
+                    val translitKey = getTranslit(cleanKey)
+                    if (translitKey.isNotEmpty()) {
+                        translitMap.getOrPut(translitKey) { mutableListOf() }.add(prog)
+                    }
+                }
+
+                val displayKeys = precomputedDisplayKeys[exactKey]
+                displayKeys?.forEach { (exactNameKey, cleanTranslitPair) ->
+                    if (exactNameKey.isNotEmpty()) {
+                        exactMap.getOrPut(exactNameKey) { mutableListOf() }.add(prog)
+                    }
+                    val (cKey, tKey) = cleanTranslitPair
+                    if (cKey.isNotEmpty()) {
+                        cleanMap.getOrPut(cKey) { mutableListOf() }.add(prog)
+                        if (tKey.isNotEmpty()) {
+                            translitMap.getOrPut(tKey) { mutableListOf() }.add(prog)
+                        }
                     }
                 }
             }
         }
 
-        epgDataMap = exactMap.mapValues { entry -> entry.value.sortedBy { it.startTime } }
-        epgCleanNameMap = cleanMap.mapValues { entry -> entry.value.sortedBy { it.startTime } }
-        epgTranslitNameMap = translitMap.mapValues { entry -> entry.value.sortedBy { it.startTime } }
+        epgDataMap = exactMap
+        epgCleanNameMap = cleanMap
+        epgTranslitNameMap = translitMap
         
         withContext(Dispatchers.Main) {
             _epgPrograms.value = programs
@@ -715,9 +826,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _playlistError.value = null
                     _rawChannels.value = parsed
                     saveChannelsToCache(parsed)
-                    _selectedCategory.value = "All"
-                    selectedFolder.value = null
-                    _searchQuery.value = ""
                     _playlists.value = _playlists.value.map {
                         if (it.url.trim() == source) it.copy(channelCount = parsed.size) else it
                     }
@@ -805,70 +913,85 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 for (source in enabledSources) {
+                    val rawUrl = source.url.trim()
+                    if (rawUrl.isBlank()) continue
+                    val finalUrl = if (!rawUrl.startsWith("http://", true) && !rawUrl.startsWith("https://", true)) {
+                        "http://$rawUrl"
+                    } else rawUrl
+
                     try {
                         val request = Request.Builder()
-                            .url(source.url)
-                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+                            .url(finalUrl)
+                            .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) OpenIPTV/5.2")
                             .build()
                         client.newCall(request).execute().use { response ->
-                            if (response.isSuccessful) {
-                                response.body?.let { body ->
-                                    val contentLength = body.contentLength()
-                                    val rawStream = body.byteStream()
+                            if (!response.isSuccessful) {
+                                withContext(Dispatchers.Main) {
+                                    _epgStatus.value = "HTTP ${response.code}: ${source.name}"
+                                }
+                                return@use
+                            }
+                            response.body?.let { body ->
+                                val contentLength = body.contentLength()
+                                val rawStream = body.byteStream()
 
-                                    var bytesReadTotal = 0L
-                                    val countingStream = object : java.io.FilterInputStream(rawStream) {
-                                        override fun read(): Int {
-                                            val b = super.read()
-                                            if (b != -1) {
-                                                bytesReadTotal++
-                                                updateProgress(bytesReadTotal, contentLength)
-                                            }
-                                            return b
+                                var bytesReadTotal = 0L
+                                val countingStream = object : java.io.FilterInputStream(rawStream) {
+                                    override fun read(): Int {
+                                        val b = super.read()
+                                        if (b != -1) {
+                                            bytesReadTotal++
+                                            updateProgress(bytesReadTotal, contentLength, source.name)
                                         }
-                                        override fun read(b: ByteArray, off: Int, len: Int): Int {
-                                            val r = super.read(b, off, len)
-                                            if (r > 0) {
-                                                bytesReadTotal += r
-                                                updateProgress(bytesReadTotal, contentLength)
-                                            }
-                                            return r
-                                        }
-                                        private fun updateProgress(current: Long, total: Long) {
-                                            val currentMB = current / (1024.0 * 1024.0)
-                                            val progressStr = if (total > 0) {
-                                                val totalMB = total / (1024.0 * 1024.0)
-                                                val percent = (current * 100 / total).toInt().coerceIn(0, 100)
-                                                String.format(Locale.US, "%.1f / %.1f MB (%d%%)", currentMB, totalMB, percent)
-                                            } else {
-                                                String.format(Locale.US, "%.1f MB", currentMB)
-                                            }
-                                            _epgStatus.value = progressStr
-                                        }
+                                        return b
                                     }
-
-                                    val bis = BufferedInputStream(countingStream)
-                                    bis.mark(10)
-                                    val b1 = bis.read()
-                                    val b2 = bis.read()
-                                    bis.reset()
-                                    
-                                    val isGzipped = (b1 == 0x1f && b2 == 0x8b)
-
-                                    var parsedCount = 0
-                                    XmlTvParser.parseStreaming(
-                                        bis, isGzipped, cutoffTime, futureLimit,
-                                        onChannelNamesParsed = { namesMap ->
-                                            xmlTvChannelNamesMap.putAll(namesMap)
+                                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                                        val r = super.read(b, off, len)
+                                        if (r > 0) {
+                                            bytesReadTotal += r
+                                            updateProgress(bytesReadTotal, contentLength, source.name)
                                         }
-                                    ) { batch ->
-                                        try {
-                                            epgDao.insertAll(batch)
-                                            parsedCount += batch.size
-                                            _epgStatus.value = "PARSING: $parsedCount"
-                                        } catch (e: Exception) {
-                                            e.printStackTrace()
+                                        return r
+                                    }
+                                    private var lastUpdateMs = 0L
+                                    private fun updateProgress(current: Long, total: Long, sName: String) {
+                                        val now = System.currentTimeMillis()
+                                        if (now - lastUpdateMs < 250 && current < total) return
+                                        lastUpdateMs = now
+                                        val currentMB = current / (1024.0 * 1024.0)
+                                        val progressStr = if (total > 0L) {
+                                            val totalMB = total / (1024.0 * 1024.0)
+                                            val percent = (current * 100 / total).toInt().coerceIn(0, 99)
+                                            String.format(Locale.US, "%s: %.1f/%.1f MB (%d%%)", sName, currentMB, totalMB, percent)
+                                        } else {
+                                            String.format(Locale.US, "%s: %.1f MB", sName, currentMB)
                                         }
+                                        _epgStatus.value = progressStr
+                                    }
+                                }
+
+                                val bis = BufferedInputStream(countingStream, 64 * 1024)
+                                bis.mark(64 * 1024)
+                                val b1 = bis.read()
+                                val b2 = bis.read()
+                                bis.reset()
+
+                                val isGzipped = (b1 == 0x1f && b2 == 0x8b) || finalUrl.endsWith(".gz", true)
+
+                                var parsedCount = 0
+                                XmlTvParser.parseStreaming(
+                                    bis, isGzipped, cutoffTime, futureLimit,
+                                    onChannelNamesParsed = { namesMap ->
+                                        xmlTvChannelNamesMap.putAll(namesMap)
+                                        saveXmlTvChannelNamesToPrefs()
+                                    }
+                                ) { batch ->
+                                    try {
+                                        epgDao.insertAll(batch)
+                                        parsedCount += batch.size
+                                        _epgStatus.value = "${source.name}: $parsedCount EPG"
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
                                     }
                                 }
                             }
@@ -911,6 +1034,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 epgDao.deleteAll()
                 epgDataMap = emptyMap()
                 epgCleanNameMap = emptyMap()
+                epgTranslitNameMap = emptyMap()
+                xmlTvChannelNamesMap.clear()
+                prefs.edit().remove("xmltv_channel_names_json").apply()
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -1030,6 +1156,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "reload_stream_toggle" -> reloadStreamOnToggle.value = value
                     "force_landscape" -> forceLandscape.value = value
                     "background_playback" -> backgroundPlayback.value = value
+                    "car_fullscreen_mode" -> carFullscreenMode.value = value
                     "show_source" -> showSource.value = value
                     "show_resolution" -> showResolution.value = value
                     "show_fps" -> showFps.value = value
@@ -1085,6 +1212,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "epg_progress_style" -> epgProgressStyle.value = value
                     "player_glass_tint" -> playerGlassTint.value = value
                     "card_badge_style" -> cardBadgeStyle.value = value
+                    "wheel_next_action" -> wheelNextAction.value = value
+                    "wheel_prev_action" -> wheelPrevAction.value = value
+                    "wheel_channel_up_action" -> wheelChannelUpAction.value = value
+                    "wheel_channel_down_action" -> wheelChannelDownAction.value = value
                 }
             }
             is Int -> {
@@ -1202,7 +1333,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _rawChannels.value = emptyList()
         _epgPrograms.value = emptyList()
         epgDataMap = emptyMap()
-        epgCleanNameMap = emptyMap()
         _currentPrograms.value = emptyMap()
         _favorites.value = emptySet()
         _pinnedUrls.value = emptySet()
@@ -1282,6 +1412,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectCategory(category: String) { _selectedCategory.value = category }
     fun updateSearchQuery(query: String) { _searchQuery.value = query }
+
+    fun getChannelArchivePrograms(channel: com.kraftplay.openiptv.model.IptvChannel?): List<EpgProgram> {
+        if (channel == null) return emptyList()
+        val now = System.currentTimeMillis()
+        val earliest = now - 14L * 24L * 60L * 60L * 1000L
+
+        val keysToTry = listOfNotNull(
+            channel.epgId?.lowercase(Locale.ROOT)?.trim(),
+            channel.tvgName?.lowercase(Locale.ROOT)?.trim(),
+            channel.name.lowercase(Locale.ROOT).trim()
+        ).filter { it.isNotBlank() }
+
+        val result = mutableListOf<EpgProgram>()
+        val visitedProgramKeys = HashSet<String>()
+
+        for (rawKey in keysToTry) {
+            epgDataMap[rawKey]?.forEach { p ->
+                if (p.endTime <= now && p.startTime >= earliest) {
+                    val uniqueKey = "${p.title}_${p.startTime}_${p.endTime}"
+                    if (visitedProgramKeys.add(uniqueKey)) {
+                        result.add(p)
+                    }
+                }
+            }
+            val cleanKey = EpgMatcher.cleanName(rawKey)
+            if (cleanKey.isNotEmpty()) {
+                epgCleanNameMap[cleanKey]?.forEach { p ->
+                    if (p.endTime <= now && p.startTime >= earliest) {
+                        val uniqueKey = "${p.title}_${p.startTime}_${p.endTime}"
+                        if (visitedProgramKeys.add(uniqueKey)) {
+                            result.add(p)
+                        }
+                    }
+                }
+                val translitKey = EpgMatcher.transliterate(cleanKey)
+                if (translitKey.isNotEmpty()) {
+                    epgTranslitNameMap[translitKey]?.forEach { p ->
+                        if (p.endTime <= now && p.startTime >= earliest) {
+                            val uniqueKey = "${p.title}_${p.startTime}_${p.endTime}"
+                            if (visitedProgramKeys.add(uniqueKey)) {
+                                result.add(p)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return result.sortedByDescending { it.startTime }
+    }
 
     fun getChannelSchedule(url: String): Flow<List<EpgProgram>> = flow {
         val channels = allChannels.value

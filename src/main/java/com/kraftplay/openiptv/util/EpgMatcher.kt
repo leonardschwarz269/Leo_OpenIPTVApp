@@ -21,8 +21,8 @@ object EpgMatcher {
         return raw.lowercase(Locale.ROOT)
             .replace(Regex("""\[[^]]*]"""), " ")
             .replace(Regex("""\([^)]*\)"""), " ")
-            .replace(Regex("""\b(ru|pl|de|ua|by|uz|kz)\s*:"""), " ")
-            .replace(Regex("""\b(fhd|uhd|4k|8k|hd|sd|hevc|h[ .]?265|50fps|60fps|1080p|720p|576p|vip|premium)\b"""), " ")
+            .replace(Regex("""\b(ru|pl|de|ua|by|uz|kz|en|fr|it|es|tr|ro|bg|cz|sk|hu)\s*:"""), " ")
+            .replace(Regex("""\b(fhd|uhd|4k|8k|hd|sd|hevc|h[ .]?265|50fps|60fps|1080p|720p|576p|vip|premium|orig|50|60|\+1|\+2|\+3|\+4|\+5|\+6|\+7|\+8|\+9)\b"""), " ")
             .replace(Regex("""[^\p{L}\p{N}]+"""), "")
             .trim()
     }
@@ -42,7 +42,16 @@ object EpgMatcher {
 
     private fun activeProgram(programs: List<EpgProgram>?, now: Long): EpgProgram? {
         if (programs.isNullOrEmpty()) return null
-        return programs.find { now >= it.startTime && now < it.endTime }
+        for (i in programs.indices) {
+            val p = programs[i]
+            if (now < p.startTime) {
+                break
+            }
+            if (now < p.endTime) {
+                return p
+            }
+        }
+        return null
     }
 
     fun findProgramForChannel(
@@ -50,32 +59,61 @@ object EpgMatcher {
         epgDataMap: Map<String, List<EpgProgram>>,
         epgCleanNameMap: Map<String, List<EpgProgram>>,
         epgTranslitNameMap: Map<String, List<EpgProgram>>,
-        now: Long
+        now: Long = System.currentTimeMillis()
     ): EpgProgram? {
+        // 1. Try epgId
         if (!channel.epgId.isNullOrBlank()) {
-            val match = activeProgram(epgDataMap[channel.epgId.lowercase(Locale.ROOT).trim()], now)
-            if (match != null) return match
+            val idKey = channel.epgId.lowercase(Locale.ROOT).trim()
+            val matchExact = activeProgram(epgDataMap[idKey], now)
+            if (matchExact != null) return matchExact
+
+            val cleanId = cleanName(idKey)
+            if (cleanId.isNotEmpty()) {
+                val matchClean = activeProgram(epgCleanNameMap[cleanId], now)
+                if (matchClean != null) return matchClean
+
+                val translitId = transliterate(cleanId)
+                if (translitId.isNotEmpty()) {
+                    val matchTranslit = activeProgram(epgTranslitNameMap[translitId], now)
+                    if (matchTranslit != null) return matchTranslit
+                }
+            }
         }
+
+        // 2. Try tvgName
         if (!channel.tvgName.isNullOrBlank()) {
             val tvgKey = channel.tvgName.lowercase(Locale.ROOT).trim()
-            val match = activeProgram(epgDataMap[tvgKey], now)
-                ?: activeProgram(epgCleanNameMap[cleanName(tvgKey)], now)
-            if (match != null) return match
+            val matchExact = activeProgram(epgDataMap[tvgKey], now)
+            if (matchExact != null) return matchExact
+
+            val cleanTvg = cleanName(tvgKey)
+            if (cleanTvg.isNotEmpty()) {
+                val matchClean = activeProgram(epgCleanNameMap[cleanTvg], now)
+                if (matchClean != null) return matchClean
+
+                val translitTvg = transliterate(cleanTvg)
+                if (translitTvg.isNotEmpty()) {
+                    val matchTranslit = activeProgram(epgTranslitNameMap[translitTvg], now)
+                    if (matchTranslit != null) return matchTranslit
+                }
+            }
         }
-        val nameLower = channel.name.lowercase(Locale.ROOT).trim()
-        val matchExact = activeProgram(epgDataMap[nameLower], now)
-        if (matchExact != null) return matchExact
+
+        // 3. Try channel title (name)
+        val nameKey = channel.name.lowercase(Locale.ROOT).trim()
+        val matchExactName = activeProgram(epgDataMap[nameKey], now)
+        if (matchExactName != null) return matchExactName
 
         val cleanChannelName = cleanName(channel.name)
         if (cleanChannelName.isNotEmpty()) {
-            val matchClean = activeProgram(epgCleanNameMap[cleanChannelName], now)
-            if (matchClean != null) return matchClean
-        }
+            val matchCleanName = activeProgram(epgCleanNameMap[cleanChannelName], now)
+            if (matchCleanName != null) return matchCleanName
 
-        val translitChannelName = transliterate(cleanChannelName)
-        if (translitChannelName.isNotEmpty()) {
-            val matchTranslit = activeProgram(epgTranslitNameMap[translitChannelName], now)
-            if (matchTranslit != null) return matchTranslit
+            val translitChannelName = transliterate(cleanChannelName)
+            if (translitChannelName.isNotEmpty()) {
+                val matchTranslitName = activeProgram(epgTranslitNameMap[translitChannelName], now)
+                if (matchTranslitName != null) return matchTranslitName
+            }
         }
 
         return null
@@ -87,13 +125,19 @@ object EpgMatcher {
         epgDataMap: Map<String, List<EpgProgram>>,
         epgCleanNameMap: Map<String, List<EpgProgram>>,
         epgTranslitNameMap: Map<String, List<EpgProgram>>,
-        now: Long
+        now: Long = System.currentTimeMillis()
     ): EpgProgram? {
         val id = currentMatch.channelId.lowercase(Locale.ROOT).trim()
         val progs = epgDataMap[id]
             ?: epgCleanNameMap[cleanName(id)]
             ?: epgTranslitNameMap[transliterate(cleanName(id))]
             ?: emptyList()
-        return progs.find { it.startTime >= currentMatch.endTime }
+        for (i in progs.indices) {
+            val p = progs[i]
+            if (p.startTime >= currentMatch.endTime) {
+                return p
+            }
+        }
+        return null
     }
 }

@@ -6,8 +6,7 @@ import android.content.res.Configuration
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
@@ -15,6 +14,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -35,7 +35,14 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.rotate
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.sin
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -48,6 +55,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -67,6 +78,7 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.kraftplay.openiptv.model.IptvChannel
 import com.kraftplay.openiptv.util.CatchupUrlBuilder
+import com.kraftplay.openiptv.util.EpgMatcher
 import com.kraftplay.openiptv.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 import java.net.URLDecoder
@@ -86,7 +98,7 @@ fun PlayerScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val configuration = LocalConfiguration.current
     val isLandscapeLayout = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE ||
-        configuration.screenWidthDp > configuration.screenHeightDp
+            configuration.screenWidthDp > configuration.screenHeightDp
 
     val allChannels by viewModel.allChannels.collectAsState()
     val clockEnabled by viewModel.showClock.collectAsState()
@@ -108,6 +120,13 @@ fun PlayerScreen(
     val bufferingLevel by viewModel.bufferingLevel.collectAsState()
     val playerGlassTint by viewModel.playerGlassTint.collectAsState()
     val epgProgressStyle by viewModel.epgProgressStyle.collectAsState()
+    val badgeShape by viewModel.badgeShape.collectAsState()
+    val iconRotationEnabled by viewModel.iconRotationEnabled.collectAsState()
+
+    val wheelNextAction by viewModel.wheelNextAction.collectAsState()
+    val wheelPrevAction by viewModel.wheelPrevAction.collectAsState()
+    val wheelChannelUpAction by viewModel.wheelChannelUpAction.collectAsState()
+    val wheelChannelDownAction by viewModel.wheelChannelDownAction.collectAsState()
 
     val selectedPlaylists by viewModel.playlists.collectAsState()
     val selectedPlaylist = selectedPlaylists.firstOrNull { it.isSelected }
@@ -134,7 +153,7 @@ fun PlayerScreen(
         val plId = selectedPlaylist?.id.orEmpty()
 
         com.kraftplay.openiptv.model.isKitTvPlaylist(plName, plUrl, plId) ||
-        com.kraftplay.openiptv.model.isKitTvPlaylist(chName, chUrl)
+                com.kraftplay.openiptv.model.isKitTvPlaylist(chName, chUrl)
     }
 
     val showSourceOpt = showSourceSetting && !isKitTvChannel
@@ -189,27 +208,8 @@ fun PlayerScreen(
         }
     }
 
-    val exoPlayer = remember(bufferingLevel) {
-        val (minBuffer, maxBuffer) = when (bufferingLevel) {
-            "Low" -> 15_000 to 30_000
-            "High" -> 50_000 to 120_000
-            else -> 30_000 to 60_000
-        }
-        val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
-            .setBufferDurationsMs(minBuffer, maxBuffer, 1500, 3000)
-            .build()
-
-        ExoPlayer.Builder(context)
-            .setLoadControl(loadControl)
-            .build().apply {
-                playWhenReady = true
-            }
-    }
-
-    DisposableEffect(exoPlayer) {
-        onDispose {
-            exoPlayer.release()
-        }
+    val exoPlayer = remember {
+        com.kraftplay.openiptv.service.SharedPlayerManager.getOrCreatePlayer(context, bufferingLevel)
     }
 
     var showInfoPanel by remember { mutableStateOf(true) }
@@ -224,7 +224,28 @@ fun PlayerScreen(
     }
     var isPlaying by remember { mutableStateOf(false) }
     var isBuffering by remember { mutableStateOf(true) }
-    var videoQuality by remember { mutableStateOf("Calculating...") }
+    var currentVideoSize by remember { mutableStateOf<VideoSize?>(null) }
+    val videoQuality = remember(currentVideoSize, resFormat) {
+        val size = currentVideoSize
+        if (size != null && size.width > 0 && size.height > 0) {
+            val width = size.width
+            val height = size.height
+            val mode = resFormat.trim().lowercase(Locale.ROOT)
+            if (mode == "labels" || mode == "label" || mode == "метки" || mode == "метка") {
+                when {
+                    height >= 2160 || width >= 3840 -> "4K UHD"
+                    height >= 1440 || width >= 2560 -> "2K QHD"
+                    height >= 1080 || width >= 1920 -> "1080p FHD"
+                    height >= 720 || width >= 1280 -> "720p HD"
+                    else -> "SD (${height}p)"
+                }
+            } else {
+                "${width}x${height}"
+            }
+        } else {
+            "Calculating…"
+        }
+    }
     var fps by remember { mutableStateOf("") }
     var bitRate by remember { mutableStateOf("") }
     var videoCodec by remember { mutableStateOf("H.264") }
@@ -282,22 +303,33 @@ fun PlayerScreen(
         userInteracted()
     }
 
+    fun handleWheelAction(action: String) {
+        userInteracted()
+        when (action) {
+            "NextChannel" -> switchToNextChannel()
+            "PrevChannel" -> switchToPreviousChannel()
+            "Skip10" -> exoPlayer.seekTo((exoPlayer.currentPosition + 10_000L).coerceAtMost(exoPlayer.duration.coerceAtLeast(0L)))
+            "Skip30" -> exoPlayer.seekTo((exoPlayer.currentPosition + 30_000L).coerceAtMost(exoPlayer.duration.coerceAtLeast(0L)))
+            "Skip60" -> exoPlayer.seekTo((exoPlayer.currentPosition + 60_000L).coerceAtMost(exoPlayer.duration.coerceAtLeast(0L)))
+            "Rewind10" -> exoPlayer.seekTo((exoPlayer.currentPosition - 10_000L).coerceAtLeast(0L))
+            "Rewind30" -> exoPlayer.seekTo((exoPlayer.currentPosition - 30_000L).coerceAtLeast(0L))
+            "Rewind60" -> exoPlayer.seekTo((exoPlayer.currentPosition - 60_000L).coerceAtLeast(0L))
+            else -> switchToNextChannel()
+        }
+    }
+
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
+            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val nextUrl = mediaItem?.mediaId
+                if (!nextUrl.isNullOrBlank() && nextUrl != currentUrl) {
+                    archiveLiveUrl = null
+                    currentUrl = nextUrl
+                }
+            }
             override fun onVideoSizeChanged(videoSize: VideoSize) {
-                val width = videoSize.width
-                val height = videoSize.height
-                if (width > 0 && height > 0) {
-                    videoQuality = if (resFormat == "Labels") {
-                        when {
-                            height >= 2160 -> "4K UHD"
-                            height >= 1080 -> "1080p FHD"
-                            height >= 720 -> "720p HD"
-                            else -> "SD ($height p)"
-                        }
-                    } else {
-                        "${width}x${height}"
-                    }
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    currentVideoSize = videoSize
                     fps = "60 FPS"
                 }
             }
@@ -307,10 +339,20 @@ fun PlayerScreen(
             }
             override fun onPlayerError(error: PlaybackException) {
                 isBuffering = false
-                playbackError = error.localizedMessage ?: "Could not play stream"
-                if (retryCount < 1) {
+                val errorMsg = error.localizedMessage ?: "Could not play stream"
+                if (retryCount < 3) {
                     retryCount += 1
-                    playbackError = "Stream error. Retrying…"
+                    playbackError = "Stream error. Auto-retrying ($retryCount/3)…"
+                    CoroutineScope(Dispatchers.Main).launch {
+                        delay(1200L * retryCount)
+                        runCatching {
+                            exoPlayer.seekToDefaultPosition()
+                            exoPlayer.prepare()
+                            exoPlayer.playWhenReady = true
+                        }
+                    }
+                } else {
+                    playbackError = errorMsg
                 }
             }
             override fun onPlaybackStateChanged(state: Int) {
@@ -329,10 +371,10 @@ fun PlayerScreen(
                         ?: currentPlayer?.audioFormat
                     videoCodec = videoFormat?.codecs
                         ?: videoFormat?.sampleMimeType?.substringAfter("/")?.uppercase(Locale.ROOT)
-                        ?: "Detecting"
+                                ?: "Detecting"
                     audioCodec = audioFormat?.codecs
                         ?: audioFormat?.sampleMimeType?.substringAfter("/")?.uppercase(Locale.ROOT)
-                        ?: "Detecting"
+                                ?: "Detecting"
                 }
             }
         }
@@ -345,13 +387,20 @@ fun PlayerScreen(
         exoPlayer.volume = audioVolumeBoost
     }
 
-    LaunchedEffect(currentUrl, retryCount) {
+    LaunchedEffect(currentUrl, archiveLiveUrl, retryCount) {
         isBuffering = true
         playbackError = null
-        exoPlayer.setMediaItem(MediaItem.fromUri(decodedUrl))
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
+        val targetUrl = currentUrl
+        val decodedStreamUrl = runCatching { URLDecoder.decode(targetUrl, StandardCharsets.UTF_8.toString()) }.getOrDefault(targetUrl)
         val channel = allChannels.find { it.url == currentUrl }
+            ?: archiveLiveUrl?.let { live -> allChannels.find { it.url == live } }
+        com.kraftplay.openiptv.service.SharedPlayerManager.playStream(
+            context = context,
+            streamUrl = decodedStreamUrl,
+            channel = channel,
+            allChannels = allChannels,
+            bufferingLevel = bufferingLevel
+        )
         channel?.let { viewModel.addToRecent(it) }
         showInfoPanel = true
         lastInteractionTime = System.currentTimeMillis()
@@ -398,7 +447,14 @@ fun PlayerScreen(
     }
 
     BackHandler {
+        com.kraftplay.openiptv.service.SharedPlayerManager.stopPlayback()
         onExitChannel()
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            com.kraftplay.openiptv.service.SharedPlayerManager.stopPlayback()
+        }
     }
 
     LaunchedEffect(showInfoPanel) {
@@ -436,9 +492,54 @@ fun PlayerScreen(
             .onPreviewKeyEvent { event ->
                 val keyCode = event.nativeKeyEvent.keyCode
                 val isConfirm = keyCode == android.view.KeyEvent.KEYCODE_DPAD_CENTER ||
-                    keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
-                    keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
+                        keyCode == android.view.KeyEvent.KEYCODE_ENTER ||
+                        keyCode == android.view.KeyEvent.KEYCODE_NUMPAD_ENTER
                 when {
+                    keyCode == android.view.KeyEvent.KEYCODE_MEDIA_NEXT -> {
+                        if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN && event.nativeKeyEvent.repeatCount == 0) {
+                            handleWheelAction(wheelNextAction)
+                        }
+                        true
+                    }
+                    keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
+                        if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN && event.nativeKeyEvent.repeatCount == 0) {
+                            handleWheelAction(wheelPrevAction)
+                        }
+                        true
+                    }
+                    keyCode == android.view.KeyEvent.KEYCODE_CHANNEL_UP -> {
+                        if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN && event.nativeKeyEvent.repeatCount == 0) {
+                            handleWheelAction(wheelChannelUpAction)
+                        }
+                        true
+                    }
+                    keyCode == android.view.KeyEvent.KEYCODE_CHANNEL_DOWN -> {
+                        if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN && event.nativeKeyEvent.repeatCount == 0) {
+                            handleWheelAction(wheelChannelDownAction)
+                        }
+                        true
+                    }
+                    keyCode == android.view.KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> {
+                        if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN && event.nativeKeyEvent.repeatCount == 0) {
+                            handleWheelAction("Skip10")
+                        }
+                        true
+                    }
+                    keyCode == android.view.KeyEvent.KEYCODE_MEDIA_REWIND -> {
+                        if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN && event.nativeKeyEvent.repeatCount == 0) {
+                            handleWheelAction("Rewind10")
+                        }
+                        true
+                    }
+                    keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE ||
+                            keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PLAY ||
+                            keyCode == android.view.KeyEvent.KEYCODE_MEDIA_PAUSE -> {
+                        if (event.nativeKeyEvent.action == android.view.KeyEvent.ACTION_DOWN && event.nativeKeyEvent.repeatCount == 0) {
+                            userInteracted()
+                            if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                        }
+                        true
+                    }
                     keyCode == android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> {
                         if (showInfoPanel) false
                         else {
@@ -508,13 +609,17 @@ fun PlayerScreen(
                         useController = false
                         keepScreenOn = true
                         resizeMode = resizeModeVal
+                        setShutterBackgroundColor(android.graphics.Color.TRANSPARENT)
                         setBackgroundColor(android.graphics.Color.BLACK)
                     }
                 },
                 update = { view ->
-                    view.player = exoPlayer
+                    if (view.player != exoPlayer) view.player = exoPlayer
                     view.keepScreenOn = true
                     view.resizeMode = resizeModeVal
+                },
+                onRelease = { view ->
+                    view.player = null
                 },
                 modifier = videoBoxModifier
             )
@@ -522,7 +627,7 @@ fun PlayerScreen(
 
         if (isBuffering && playbackError == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                ExpressiveLoadingIndicator(size = 72.dp)
             }
         }
 
@@ -672,7 +777,9 @@ fun PlayerScreen(
                                 exoPlayer.seekTo((position - 10_000L).coerceAtLeast(0L))
                             },
                             icon = Icons.Rounded.FastRewind,
-                            size = 56.dp
+                            size = 56.dp,
+                            badgeShape = badgeShape,
+                            rotationEnabled = iconRotationEnabled
                         )
 
                         ExpressivePlaybackButton(
@@ -689,7 +796,9 @@ fun PlayerScreen(
                             icon = Icons.Rounded.FastForward,
                             size = 64.dp,
                             focusRequester = focusRequester,
-                            accent = true
+                            accent = true,
+                            badgeShape = badgeShape,
+                            rotationEnabled = iconRotationEnabled
                         )
 
                         ExpressivePlaybackButton(
@@ -700,7 +809,9 @@ fun PlayerScreen(
                                 exoPlayer.seekTo(if (duration > 0L) target.coerceAtMost(duration) else target)
                             },
                             icon = Icons.Rounded.FastForward,
-                            size = 56.dp
+                            size = 56.dp,
+                            badgeShape = badgeShape,
+                            rotationEnabled = iconRotationEnabled
                         )
                     }
 
@@ -708,7 +819,9 @@ fun PlayerScreen(
                         onClick = { userInteracted(); if (isPlaying) exoPlayer.pause() else exoPlayer.play() },
                         icon = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                         size = 72.dp,
-                        accent = true
+                        accent = true,
+                        badgeShape = badgeShape,
+                        rotationEnabled = iconRotationEnabled
                     )
                 }
 
@@ -731,7 +844,7 @@ fun PlayerScreen(
                 ) {
                     if (isArchivePlayback && archiveDurationMs > 0L) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -740,22 +853,35 @@ fun PlayerScreen(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 style = MaterialTheme.typography.labelMedium
                             )
-                            Slider(
-                                value = archivePositionMs.coerceIn(0L, archiveDurationMs).toFloat(),
-                                onValueChange = { value ->
-                                    archivePositionMs = value.toLong()
-                                    userInteracted()
-                                },
-                                onValueChangeFinished = {
-                                    exoPlayer.seekTo(archivePositionMs.coerceIn(0L, archiveDurationMs))
-                                },
-                                valueRange = 0f..archiveDurationMs.toFloat(),
-                                modifier = Modifier.weight(1f),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = MaterialTheme.colorScheme.primary,
-                                    activeTrackColor = MaterialTheme.colorScheme.primary
+                            Box(
+                                modifier = Modifier.weight(1f).height(28.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                EpgProgressBar(
+                                    progress = (archivePositionMs.toFloat() / archiveDurationMs.toFloat()).coerceIn(0f, 1f),
+                                    style = epgProgressStyle,
+                                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                                    color = MaterialTheme.colorScheme.primary,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
                                 )
-                            )
+                                Slider(
+                                    value = archivePositionMs.coerceIn(0L, archiveDurationMs).toFloat(),
+                                    onValueChange = { value ->
+                                        archivePositionMs = value.toLong()
+                                        userInteracted()
+                                    },
+                                    onValueChangeFinished = {
+                                        exoPlayer.seekTo(archivePositionMs.coerceIn(0L, archiveDurationMs))
+                                    },
+                                    valueRange = 0f..archiveDurationMs.toFloat(),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = SliderDefaults.colors(
+                                        thumbColor = MaterialTheme.colorScheme.primary,
+                                        activeTrackColor = Color.Transparent,
+                                        inactiveTrackColor = Color.Transparent
+                                    )
+                                )
+                            }
                             Text(
                                 text = formatPlaybackTime(archiveDurationMs),
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -803,13 +929,13 @@ fun PlayerScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         style = MaterialTheme.typography.labelSmall
                                     )
-                                    LinearProgressIndicator(
-                                        progress = { progress.coerceIn(0f, 1f) },
+                                    EpgProgressBar(
+                                        progress = progress.coerceIn(0f, 1f),
+                                        style = epgProgressStyle,
                                         modifier = Modifier
                                             .width(if (isLandscapeLayout) 140.dp else 180.dp)
-                                            .height(5.dp)
-                                            .padding(horizontal = 6.dp)
-                                            .clip(CircleShape),
+                                            .height(6.dp)
+                                            .padding(horizontal = 6.dp),
                                         color = MaterialTheme.colorScheme.primary,
                                         trackColor = MaterialTheme.colorScheme.surfaceVariant
                                     )
@@ -961,23 +1087,16 @@ fun PlayerScreen(
 
         // Archive Dialog
         if (showArchiveDialog) {
-            val now = System.currentTimeMillis()
-            val channelKeys = remember(currentChannel?.url, currentChannel?.epgId, currentChannel?.tvgName, currentChannel?.name) {
-                listOfNotNull(currentChannel?.epgId, currentChannel?.tvgName, currentChannel?.name)
-                    .map { it.trim().lowercase(Locale.ROOT) }
-                    .filter { it.isNotBlank() }
-                    .toSet()
+            val archivePrograms = remember(showArchiveDialog, currentChannel, epgPrograms) {
+                viewModel.getChannelArchivePrograms(currentChannel)
             }
-            val archivePrograms = remember(epgPrograms, channelKeys, currentChannel?.catchupDays, now) {
-                val providerDays = currentChannel?.catchupDays?.takeIf { it > 0 } ?: 14
-                val historyDays = providerDays.coerceAtMost(14)
-                val earliest = now - historyDays.toLong() * 24L * 60L * 60L * 1000L
-                epgPrograms.asSequence()
-                    .filter { it.channelId.trim().lowercase(Locale.ROOT) in channelKeys }
-                    .filter { it.endTime <= now && it.endTime > 0L }
-                    .filter { it.startTime >= earliest }
-                    .sortedByDescending { it.startTime }
-                    .toList()
+
+            val groupedByDay = remember(archivePrograms) {
+                val dayFormat = SimpleDateFormat("EEEE, d MMMM", Locale.getDefault())
+                archivePrograms.groupBy { p ->
+                    val dateStr = dayFormat.format(Date(p.startTime))
+                    dateStr.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
+                }
             }
 
             AlertDialog(
@@ -986,58 +1105,169 @@ fun PlayerScreen(
                 containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                 title = { Text("${tr("Архив")} — ${currentChannel?.name ?: tr("Канал")}") },
                 text = {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
+                    Box(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp), contentAlignment = Alignment.Center) {
                         if (archivePrograms.isNotEmpty()) {
-                            val dateFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-                            val dayFormat = remember { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()) }
-                            var previousDay = ""
-                            archivePrograms.forEach { archivedProgram ->
-                                val dayKey = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(archivedProgram.startTime))
-                                if (dayKey != previousDay) {
-                                    previousDay = dayKey
-                                    Text(
-                                        dayFormat.format(Date(archivedProgram.startTime)).replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() },
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 3.dp)
-                                    )
-                                }
-                                val archiveUrl = currentChannel?.let {
-                                    CatchupUrlBuilder.build(
-                                        liveUrl = it.url,
-                                        sourceTemplate = it.catchupSource,
-                                        mode = if (catchupMode.equals("Auto", true)) (it.catchup?.takeIf { value -> value.isNotBlank() && !value.equals("none", true) && !value.equals("0", true) } ?: if (!it.catchupSource.isNullOrBlank()) "Default" else "Flussonic") else catchupMode,
-                                        startTimeMs = archivedProgram.startTime,
-                                        endTimeMs = archivedProgram.endTime
-                                    )
-                                }
-                                GroupItem(
-                                    onClick = {
-                                        if (archiveUrl != null) {
-                                            if (archiveLiveUrl == null) archiveLiveUrl = currentChannel.url
-                                            currentUrl = archiveUrl
-                                            showArchiveDialog = false
-                                            playbackError = null
-                                            isBuffering = true
-                                            userInteracted()
-                                        }
-                                    }
-                                ) {
-                                    Column(Modifier.padding(12.dp)) {
-                                        Text(archivedProgram.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                            val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                groupedByDay.forEach { (dayHeader, programsForDay) ->
+                                    item(key = "header_$dayHeader") {
                                         Text(
-                                            "${dateFormat.format(Date(archivedProgram.startTime))}–${dateFormat.format(Date(archivedProgram.endTime))}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            dayHeader,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 4.dp)
                                         )
+                                    }
+                                    items(programsForDay, key = { "${it.channelId}_${it.title}_${it.startTime}" }) { archivedProgram ->
+                                        GroupItem(
+                                            onClick = {
+                                                val ch = currentChannel
+                                                if (ch != null) {
+                                                    val archiveUrl = CatchupUrlBuilder.build(
+                                                        liveUrl = ch.url,
+                                                        sourceTemplate = ch.catchupSource,
+                                                        mode = if (catchupMode.equals("Auto", true)) (ch.catchup?.takeIf { value -> value.isNotBlank() && !value.equals("none", true) && !value.equals("0", true) } ?: if (!ch.catchupSource.isNullOrBlank()) "Default" else "Flussonic") else catchupMode,
+                                                        startTimeMs = archivedProgram.startTime,
+                                                        endTimeMs = archivedProgram.endTime
+                                                    )
+                                                    if (archiveUrl != null) {
+                                                        if (archiveLiveUrl == null) archiveLiveUrl = ch.url
+                                                        currentUrl = archiveUrl
+                                                        showArchiveDialog = false
+                                                        playbackError = null
+                                                        isBuffering = true
+                                                        userInteracted()
+                                                    }
+                                                }
+                                            }
+                                        ) {
+                                            Column(Modifier.padding(12.dp)) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Text(
+                                                        archivedProgram.title,
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        modifier = Modifier.weight(1f)
+                                                    )
+                                                    Surface(
+                                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                                        shape = RoundedCornerShape(6.dp)
+                                                    ) {
+                                                        Text(
+                                                            "${timeFormat.format(Date(archivedProgram.startTime))} – ${timeFormat.format(Date(archivedProgram.endTime))}",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                            fontWeight = FontWeight.Bold,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
+                                                if (!archivedProgram.description.isNullOrBlank()) {
+                                                    Spacer(Modifier.height(4.dp))
+                                                    Text(
+                                                        archivedProgram.description,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 2,
+                                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
                         } else {
-                            Text(tr("Нет доступных программ в архиве"), style = MaterialTheme.typography.bodyMedium)
+                            val rewindOptions = remember {
+                                listOf(
+                                    1 to tr("1 час назад"),
+                                    2 to tr("2 часа назад"),
+                                    5 to tr("5 часов назад"),
+                                    12 to tr("12 часов назад"),
+                                    24 to tr("1 день назад (24 часа)"),
+                                    48 to tr("2 дня назад (48 часов)"),
+                                    72 to tr("3 дня назад (72 часа)"),
+                                    120 to tr("5 дней назад (120 часов)"),
+                                    168 to tr("7 дней назад (168 часов)")
+                                )
+                            }
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                item {
+                                    Text(
+                                        tr("Быстрый переход в архив"),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.padding(bottom = 6.dp)
+                                    )
+                                }
+                                items(rewindOptions) { (hours, label) ->
+                                    GroupItem(
+                                        onClick = {
+                                            val ch = currentChannel
+                                            if (ch != null) {
+                                                val secondsBack = hours * 3600L
+                                                val nowMs = System.currentTimeMillis()
+                                                val startTimeMs = nowMs - secondsBack * 1000L
+                                                val endTimeMs = nowMs
+                                                val effectiveMode = if (catchupMode.equals("Auto", true)) {
+                                                    ch.catchup?.takeIf { value -> value.isNotBlank() && !value.equals("none", true) && !value.equals("0", true) }
+                                                        ?: if (!ch.catchupSource.isNullOrBlank()) "Default" else "Flussonic"
+                                                } else catchupMode
+
+                                                val archiveUrl = CatchupUrlBuilder.build(
+                                                    liveUrl = ch.url,
+                                                    sourceTemplate = ch.catchupSource,
+                                                    mode = effectiveMode,
+                                                    startTimeMs = startTimeMs,
+                                                    endTimeMs = endTimeMs
+                                                ) ?: CatchupUrlBuilder.buildRelative(
+                                                    liveUrl = ch.url,
+                                                    mode = effectiveMode,
+                                                    secondsBack = secondsBack
+                                                )
+
+                                                if (archiveUrl != null) {
+                                                    if (archiveLiveUrl == null) archiveLiveUrl = ch.url
+                                                    currentUrl = archiveUrl
+                                                    showArchiveDialog = false
+                                                    playbackError = null
+                                                    isBuffering = true
+                                                    userInteracted()
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.History,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.padding(end = 12.dp)
+                                            )
+                                            Text(
+                                                text = label,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 },
@@ -1241,34 +1471,138 @@ private fun ExpressivePlaybackButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     size: androidx.compose.ui.unit.Dp,
     focusRequester: FocusRequester? = null,
-    accent: Boolean = false
+    accent: Boolean = false,
+    badgeShape: String = "Cookie",
+    rotationEnabled: Boolean = true
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused) 1.2f else 1f, spring(dampingRatio = 0.5f, stiffness = 400f), label = "playBtnScale")
+    val scale by animateFloatAsState(
+        if (isFocused) 1.22f else 1f,
+        spring(dampingRatio = 0.5f, stiffness = 400f),
+        label = "playBtnScale"
+    )
     val cs = MaterialTheme.colorScheme
 
-    IconButton(
-        onClick = onClick,
+    val infiniteTransition = rememberInfiniteTransition(label = "playbackBtnAnim")
+    val continuousRotation by if (rotationEnabled) {
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(2400, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "playRotAngle"
+        )
+    } else remember { mutableFloatStateOf(0f) }
+
+    val wavePhase by if (rotationEnabled) {
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = (2 * Math.PI).toFloat(),
+            animationSpec = infiniteRepeatable(
+                animation = tween(1600, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "playWavePhase"
+        )
+    } else remember { mutableFloatStateOf(0f) }
+
+    val profile = remember(badgeShape) { parseShapeProfile(badgeShape) }
+    val ampFraction = if (isFocused) 0.14f else 0.09f
+    val spec = remember(profile, ampFraction) { WavySpec(profile, 8, ampFraction) }
+
+    val containerColor = if (accent) cs.primary
+    else if (isFocused) cs.primaryContainer
+    else cs.surfaceContainerHigh.copy(alpha = 0.88f)
+
+    val iconColor = if (accent) cs.onPrimary
+    else if (isFocused) cs.onPrimaryContainer
+    else cs.onSurface
+
+    Box(
         modifier = Modifier
             .size(size)
             .scale(scale)
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .onFocusChanged { isFocused = it.isFocused }
-            .clip(CircleShape)
-            .background(
-                if (accent) cs.primary
-                else if (isFocused) cs.primaryContainer
-                else cs.surfaceContainerHigh.copy(alpha = 0.85f)
-            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = androidx.compose.foundation.LocalIndication.current,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (accent) cs.onPrimary
-            else if (isFocused) cs.onPrimaryContainer
-            else cs.onSurface,
-            modifier = Modifier.size(size * 0.55f)
-        )
+        if (accent) {
+            // Material 3 Expressive Loading Indicator Wavy Button Ring
+            androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+                val strokePx = 5.dp.toPx()
+                val center = Offset(this.size.width / 2f, this.size.height / 2f)
+                val baseRadius = (min(this.size.width, this.size.height) - strokePx) / 2f
+                val numWaves = 8
+                val maxAmp = baseRadius * 0.14f * (0.5f + 0.5f * sin(wavePhase))
+
+                // Background Track Ring
+                drawCircle(
+                    color = cs.primaryContainer.copy(alpha = 0.5f),
+                    radius = baseRadius,
+                    center = center,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokePx, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                )
+
+                // Animated Expressive Wavy Ring
+                rotate(continuousRotation, center) {
+                    val path = Path()
+                    val steps = 100
+                    for (i in 0..steps) {
+                        val angleDeg = i * 360f / steps
+                        val angleRad = Math.toRadians(angleDeg.toDouble())
+                        val waveOffset = sin(angleRad * numWaves + wavePhase) * maxAmp
+                        val r = baseRadius + waveOffset
+                        val x = center.x + (r * cos(angleRad)).toFloat()
+                        val y = center.y + (r * sin(angleRad)).toFloat()
+                        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    path.close()
+
+                    drawPath(
+                        path = path,
+                        color = cs.primary,
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokePx, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                    )
+                }
+            }
+
+            // Central Pulsing Play/Pause Badge Container
+            Box(
+                modifier = Modifier
+                    .size(size * 0.62f)
+                    .clip(CircleShape)
+                    .background(cs.primary),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = cs.onPrimary,
+                    modifier = Modifier.size(size * 0.35f)
+                )
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .wavyBackground(spec, containerColor) { continuousRotation },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(size * 0.50f)
+                )
+            }
+        }
     }
 }
 

@@ -36,6 +36,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,6 +85,104 @@ fun parseShapeProfile(name: String): ShapeProfile = when (name.lowercase()) {
 }
 
 @Composable
+fun ExpressiveLoadingIndicator(
+    modifier: Modifier = Modifier,
+    size: Dp = 68.dp,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+    strokeWidth: Dp = 6.dp
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "expressiveLoader")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "loaderRot"
+    )
+
+    val wavePhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2 * Math.PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "loaderWave"
+    )
+
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.88f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(900, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "loaderPulse"
+    )
+
+    Box(
+        modifier = modifier.size(size),
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = Offset(this.size.width / 2f, this.size.height / 2f)
+            val strokePx = strokeWidth.toPx()
+            val baseRadius = (min(this.size.width, this.size.height) - strokePx) / 2f
+            val numWaves = 8
+            val maxAmp = baseRadius * 0.12f * (0.5f + 0.5f * sin(wavePhase))
+
+            // Background Track Circle
+            drawCircle(
+                color = trackColor,
+                radius = baseRadius,
+                center = center,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokePx, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            )
+
+            // Wavy Morphing Animated Path
+            val path = Path()
+            val steps = 100
+            for (i in 0..steps) {
+                val angleDeg = (i * 360f / steps) + rotation
+                val angleRad = Math.toRadians(angleDeg.toDouble())
+                val waveOffset = sin(angleRad * numWaves + wavePhase) * maxAmp
+                val r = baseRadius + waveOffset
+                val x = center.x + (r * cos(angleRad)).toFloat()
+                val y = center.y + (r * sin(angleRad)).toFloat()
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            path.close()
+
+            drawPath(
+                path = path,
+                color = color,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokePx, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            )
+        }
+
+        // Center Pulsing TV / Play Icon
+        Box(
+            modifier = Modifier
+                .size(size * 0.45f)
+                .scale(pulseScale)
+                .clip(CircleShape)
+                .background(color.copy(alpha = 0.18f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Tv,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(size * 0.28f)
+            )
+        }
+    }
+}
+
+@Composable
 fun ExpressiveAmbientCanvas(enabled: Boolean = true) {
     if (!enabled) return
     val infiniteTransition = rememberInfiniteTransition(label = "ambientCanvas")
@@ -127,94 +226,96 @@ fun Modifier.wavyBackground(
     val rot = rotationProvider()
     val maxAmp = radius * spec.amplitudeFraction
 
-    when (spec.profile) {
-        ShapeProfile.CIRCLE -> {
-            drawCircle(color = color, radius = radius, center = center)
-            return@drawBehind
-        }
-        ShapeProfile.SQUARE -> {
-            val corner = radius * 0.45f
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(center.x - radius, center.y - radius),
-                size = Size(radius * 2f, radius * 2f),
-                cornerRadius = CornerRadius(corner, corner)
-            )
-            return@drawBehind
-        }
-        ShapeProfile.PILL -> {
-            val corner = radius * 0.85f
-            drawRoundRect(
-                color = color,
-                topLeft = Offset(center.x - radius, center.y - radius * 0.75f),
-                size = Size(radius * 2f, radius * 1.5f),
-                cornerRadius = CornerRadius(corner, corner)
-            )
-            return@drawBehind
-        }
-        ShapeProfile.DIAMOND, ShapeProfile.PENTAGON, ShapeProfile.HEXAGON, ShapeProfile.OCTAGON, ShapeProfile.STAR, ShapeProfile.BURST -> {
-            val sides = when (spec.profile) {
-                ShapeProfile.DIAMOND -> 4
-                ShapeProfile.PENTAGON -> 5
-                ShapeProfile.HEXAGON -> 6
-                ShapeProfile.OCTAGON -> 8
-                ShapeProfile.STAR -> 10
-                ShapeProfile.BURST -> 24
-                else -> 4
+    if (spec.profile == ShapeProfile.CIRCLE) {
+        drawCircle(color = color, radius = radius, center = center)
+        return@drawBehind
+    }
+
+    rotate(rot, center) {
+        when (spec.profile) {
+            ShapeProfile.SQUARE -> {
+                val corner = radius * 0.45f
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(center.x - radius, center.y - radius),
+                    size = Size(radius * 2f, radius * 2f),
+                    cornerRadius = CornerRadius(corner, corner)
+                )
             }
-            val path = Path()
-            for (i in 0 until sides) {
-                val angleDeg = (i * 360f / sides) + rot - 90f
-                val angleRad = Math.toRadians(angleDeg.toDouble())
-                val r = if (spec.profile == ShapeProfile.STAR && i % 2 != 0) radius * 0.5f
-                        else if (spec.profile == ShapeProfile.BURST && i % 2 != 0) radius * 0.75f
-                        else radius
-                val x = center.x + (r * cos(angleRad)).toFloat()
-                val y = center.y + (r * sin(angleRad)).toFloat()
-                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            ShapeProfile.PILL -> {
+                val corner = radius * 0.85f
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(center.x - radius, center.y - radius * 0.75f),
+                    size = Size(radius * 2f, radius * 1.5f),
+                    cornerRadius = CornerRadius(corner, corner)
+                )
             }
-            path.close()
-            drawPath(path, color)
-            return@drawBehind
-        }
-        ShapeProfile.TEARDROP -> {
-            val path = Path()
-            path.moveTo(center.x, center.y - radius)
-            path.cubicTo(
-                center.x + radius, center.y - radius * 0.5f,
-                center.x + radius, center.y + radius,
-                center.x, center.y + radius
-            )
-            path.cubicTo(
-                center.x - radius, center.y + radius,
-                center.x - radius, center.y - radius * 0.5f,
-                center.x, center.y - radius
-            )
-            path.close()
-            drawPath(path, color)
-            return@drawBehind
-        }
-        ShapeProfile.SINE, ShapeProfile.CLOVER, ShapeProfile.SCALLOP, ShapeProfile.SUNNY -> {
-            val waves = when (spec.profile) {
-                ShapeProfile.CLOVER -> 4
-                ShapeProfile.SCALLOP -> 8
-                ShapeProfile.SUNNY -> 8
-                else -> spec.waves
+            ShapeProfile.DIAMOND, ShapeProfile.PENTAGON, ShapeProfile.HEXAGON, ShapeProfile.OCTAGON, ShapeProfile.STAR, ShapeProfile.BURST -> {
+                val sides = when (spec.profile) {
+                    ShapeProfile.DIAMOND -> 4
+                    ShapeProfile.PENTAGON -> 5
+                    ShapeProfile.HEXAGON -> 6
+                    ShapeProfile.OCTAGON -> 8
+                    ShapeProfile.STAR -> 10
+                    ShapeProfile.BURST -> 24
+                    else -> 4
+                }
+                val path = Path()
+                for (i in 0 until sides) {
+                    val angleDeg = (i * 360f / sides) - 90f
+                    val angleRad = Math.toRadians(angleDeg.toDouble())
+                    val r = if (spec.profile == ShapeProfile.STAR && i % 2 != 0) radius * 0.5f
+                            else if (spec.profile == ShapeProfile.BURST && i % 2 != 0) radius * 0.75f
+                            else radius
+                    val x = center.x + (r * cos(angleRad)).toFloat()
+                    val y = center.y + (r * sin(angleRad)).toFloat()
+                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                path.close()
+                drawPath(path, color)
             }
-            val amp = if (spec.profile == ShapeProfile.SUNNY) radius * 0.18f else maxAmp
-            val path = Path()
-            val steps = 120
-            for (i in 0..steps) {
-                val angleDeg = (i * 360f / steps) + rot
-                val angleRad = Math.toRadians(angleDeg.toDouble())
-                val waveOffset = sin(angleRad * waves) * amp
-                val r = radius - amp + waveOffset
-                val x = center.x + (r * cos(angleRad)).toFloat()
-                val y = center.y + (r * sin(angleRad)).toFloat()
-                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            ShapeProfile.TEARDROP -> {
+                val path = Path()
+                path.moveTo(center.x, center.y - radius)
+                path.cubicTo(
+                    center.x + radius, center.y - radius * 0.5f,
+                    center.x + radius, center.y + radius,
+                    center.x, center.y + radius
+                )
+                path.cubicTo(
+                    center.x - radius, center.y + radius,
+                    center.x - radius, center.y - radius * 0.5f,
+                    center.x, center.y - radius
+                )
+                path.close()
+                drawPath(path, color)
             }
-            path.close()
-            drawPath(path, color)
+            ShapeProfile.SINE, ShapeProfile.CLOVER, ShapeProfile.SCALLOP, ShapeProfile.SUNNY -> {
+                val waves = when (spec.profile) {
+                    ShapeProfile.CLOVER -> 4
+                    ShapeProfile.SCALLOP -> 8
+                    ShapeProfile.SUNNY -> 8
+                    else -> spec.waves
+                }
+                val amp = if (spec.profile == ShapeProfile.SUNNY) radius * 0.18f else maxAmp
+                val path = Path()
+                val steps = 120
+                for (i in 0..steps) {
+                    val angleDeg = i * 360f / steps
+                    val angleRad = Math.toRadians(angleDeg.toDouble())
+                    val waveOffset = sin(angleRad * waves) * amp
+                    val r = radius - amp + waveOffset
+                    val x = center.x + (r * cos(angleRad)).toFloat()
+                    val y = center.y + (r * sin(angleRad)).toFloat()
+                    if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                path.close()
+                drawPath(path, color)
+            }
+            else -> {
+                drawCircle(color = color, radius = radius, center = center)
+            }
         }
     }
 }
@@ -225,11 +326,13 @@ fun HeroCard(
     title: String,
     subtitle: String,
     stats: List<Pair<String, String>> = emptyList(),
-    badgeShape: String = "Cookie"
+    badgeShape: String = "Cookie",
+    badgeColorName: String = "Purple",
+    rotationEnabled: Boolean = true
 ) {
     val cs = MaterialTheme.colorScheme
     val infiniteTransition = rememberInfiniteTransition(label = "heroRotTransition")
-    val rotationAngle by if (!ready) {
+    val rotationAngle by if (rotationEnabled) {
         infiniteTransition.animateFloat(
             initialValue = 0f,
             targetValue = 360f,
@@ -240,8 +343,11 @@ fun HeroCard(
             label = "heroRotAngle"
         )
     } else {
-        remember { mutableFloatStateOf(45f) }
+        remember { mutableFloatStateOf(0f) }
     }
+
+    val overrideContainer = getBadgeColor(badgeColorName, if (ready) cs.primary else cs.tertiary)
+    val overrideContent = getBadgeContentColor(badgeColorName, if (ready) cs.onPrimary else cs.onTertiary)
 
     val container by animateColorAsState(
         if (ready) cs.primaryContainer else cs.tertiaryContainer,
@@ -264,13 +370,13 @@ fun HeroCard(
             Box(
                 Modifier
                     .size(72.dp)
-                    .wavyBackground(spec, if (ready) cs.primary else cs.tertiary) { rotationAngle },
+                    .wavyBackground(spec, overrideContainer) { rotationAngle },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     if (ready) Icons.Rounded.Check else Icons.Rounded.Tv,
                     contentDescription = null,
-                    tint = if (ready) cs.onPrimary else cs.onTertiary,
+                    tint = overrideContent,
                     modifier = Modifier.size(36.dp)
                 )
             }
@@ -362,6 +468,29 @@ fun GroupItem(
     }
 }
 
+fun getBadgeColor(colorName: String, fallbackContainer: Color): Color {
+    return when (colorName.trim().lowercase(java.util.Locale.ROOT)) {
+        "purple", "фиолетовый", "sirenevy", "сиреневый" -> Color(0xFF9C27B0)
+        "cyan", "бирюзовый" -> Color(0xFF00E5FF)
+        "gold", "золотой" -> Color(0xFFFFD600)
+        "lime", "лаймовый" -> Color(0xFF76FF03)
+        "orange", "оранжевый" -> Color(0xFFFF6D00)
+        "pink", "розовый" -> Color(0xFFFF4081)
+        "red", "красный" -> Color(0xFFF44336)
+        "blue", "синий" -> Color(0xFF2196F3)
+        "green", "зеленый" -> Color(0xFF4CAF50)
+        else -> Color(0xFF9C27B0)
+    }
+}
+
+fun getBadgeContentColor(colorName: String, fallbackContent: Color): Color {
+    return when (colorName.trim().lowercase(java.util.Locale.ROOT)) {
+        "cyan", "бирюзовый", "gold", "золотой", "lime", "лаймовый" -> Color.Black
+        "purple", "фиолетовый", "orange", "оранжевый", "pink", "розовый", "red", "красный", "blue", "синий", "green", "зеленый" -> Color.White
+        else -> fallbackContent
+    }
+}
+
 @Composable
 fun IconBadge(
     icon: ImageVector,
@@ -369,8 +498,8 @@ fun IconBadge(
     contentColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
     size: Dp = 42.dp,
     shapeName: String = "Cookie",
-    badgeColorName: String = "Auto",
-    rotationEnabled: Boolean = false
+    badgeColorName: String = "Purple",
+    rotationEnabled: Boolean = true
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "badgeRotation")
     val angle by if (rotationEnabled) {
@@ -385,16 +514,8 @@ fun IconBadge(
         )
     } else remember { mutableFloatStateOf(0f) }
 
-    val overrideContainer = when (badgeColorName) {
-        "Cyan" -> Color(0xFF00E5FF)
-        "Purple" -> Color(0xFFD500F9)
-        "Gold" -> Color(0xFFFFD600)
-        "Lime" -> Color(0xFF76FF03)
-        "Orange" -> Color(0xFFFF6D00)
-        "Pink" -> Color(0xFFFF4081)
-        else -> containerColor
-    }
-    val overrideContent = if (badgeColorName != "Auto") Color.Black else contentColor
+    val overrideContainer = getBadgeColor(badgeColorName, containerColor)
+    val overrideContent = getBadgeContentColor(badgeColorName, contentColor)
 
     val profile = remember(shapeName) { parseShapeProfile(shapeName) }
     val spec = remember(profile) { WavySpec(profile, 8, 0.07f) }
@@ -419,14 +540,15 @@ fun ItemTitle(
     title: String,
     subtitle: String? = null,
     shapeName: String = "Cookie",
-    rotationEnabled: Boolean = false
+    badgeColorName: String = "Purple",
+    rotationEnabled: Boolean = true
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        IconBadge(icon = icon, shapeName = shapeName, rotationEnabled = rotationEnabled)
+        IconBadge(icon = icon, shapeName = shapeName, badgeColorName = badgeColorName, rotationEnabled = rotationEnabled)
         Column(Modifier.weight(1f)) {
             Text(
                 tr(title),
@@ -455,7 +577,8 @@ fun ToggleItem(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     shapeName: String = "Cookie",
-    rotationEnabled: Boolean = false
+    badgeColorName: String = "Purple",
+    rotationEnabled: Boolean = true
 ) {
     GroupItem(onClick = { onCheckedChange(!checked) }) {
         Row(
@@ -466,7 +589,7 @@ fun ToggleItem(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Box(Modifier.weight(1f)) {
-                ItemTitle(icon, title, subtitle, shapeName = shapeName, rotationEnabled = rotationEnabled)
+                ItemTitle(icon, title, subtitle, shapeName = shapeName, badgeColorName = badgeColorName, rotationEnabled = rotationEnabled)
             }
             Switch(
                 checked = checked,
@@ -488,7 +611,8 @@ fun ActionItem(
     onClick: () -> Unit,
     trailing: (@Composable () -> Unit)? = null,
     shapeName: String = "Cookie",
-    rotationEnabled: Boolean = false
+    badgeColorName: String = "Purple",
+    rotationEnabled: Boolean = true
 ) {
     GroupItem(onClick = onClick) {
         Row(
@@ -499,7 +623,7 @@ fun ActionItem(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Box(Modifier.weight(1f)) {
-                ItemTitle(icon, title, subtitle, shapeName = shapeName, rotationEnabled = rotationEnabled)
+                ItemTitle(icon, title, subtitle, shapeName = shapeName, badgeColorName = badgeColorName, rotationEnabled = rotationEnabled)
             }
             if (trailing != null) trailing()
             else Icon(
@@ -520,7 +644,9 @@ fun SliderItem(
     format: (Float) -> String,
     onCommit: (Float) -> Unit,
     steps: Int = 0,
-    shapeName: String = "Cookie"
+    shapeName: String = "Cookie",
+    badgeColorName: String = "Purple",
+    rotationEnabled: Boolean = true
 ) {
     var local by remember(value) { mutableFloatStateOf(value) }
     var isFocused by remember { mutableStateOf(false) }
@@ -566,7 +692,7 @@ fun SliderItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                IconBadge(icon, shapeName = shapeName)
+                IconBadge(icon, shapeName = shapeName, badgeColorName = badgeColorName, rotationEnabled = rotationEnabled)
                 Text(
                     tr(title),
                     Modifier.weight(1f),
@@ -670,14 +796,15 @@ fun ChoiceItem(
     selected: String,
     onSelect: (String) -> Unit,
     shapeName: String = "Cookie",
-    rotationEnabled: Boolean = false
+    badgeColorName: String = "Purple",
+    rotationEnabled: Boolean = true
 ) {
     GroupItem {
         Column(
             Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            ItemTitle(icon, title, subtitle, shapeName = shapeName, rotationEnabled = rotationEnabled)
+            ItemTitle(icon, title, subtitle, shapeName = shapeName, badgeColorName = badgeColorName, rotationEnabled = rotationEnabled)
             ButtonGroup(options, selected, onSelect)
         }
     }
@@ -691,19 +818,32 @@ fun CategoryTile(
     badgeCount: Int = 0,
     onClick: () -> Unit,
     shapeName: String = "Cookie",
+    badgeColorName: String = "Purple",
     rotationEnabled: Boolean = true
 ) {
     val cs = MaterialTheme.colorScheme
+    val overrideContainer = getBadgeColor(badgeColorName, cs.primaryContainer)
+    val overrideContent = getBadgeContentColor(badgeColorName, cs.onPrimaryContainer)
+
     val profile = remember(shapeName) { parseShapeProfile(shapeName) }
     val expressiveSpec = remember(profile) { WavySpec(profile, 10, 0.08f) }
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
 
-    val rot by animateFloatAsState(
-        if (pressed && rotationEnabled) 35f else 0f,
-        spring(dampingRatio = 0.5f, stiffness = 300f),
-        label = "tileRot"
-    )
+    val infiniteTransition = rememberInfiniteTransition(label = "tileRotation")
+    val continuousRot by if (rotationEnabled) {
+        infiniteTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = 360f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(12000, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "tileContinuousRot"
+        )
+    } else remember { mutableFloatStateOf(0f) }
+
+    val rot = continuousRot + if (pressed) 25f else 0f
     val corner by animateDpAsState(
         if (pressed) 14.dp else 24.dp,
         spring(dampingRatio = 0.6f, stiffness = 700f),
@@ -723,10 +863,10 @@ fun CategoryTile(
         Box(
             Modifier
                 .size(48.dp)
-                .wavyBackground(expressiveSpec, cs.primaryContainer) { rot },
+                .wavyBackground(expressiveSpec, overrideContainer) { rot },
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = cs.onPrimaryContainer, modifier = Modifier.size(24.dp))
+            Icon(icon, contentDescription = null, tint = overrideContent, modifier = Modifier.size(24.dp))
         }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -811,4 +951,168 @@ fun SettingsSearch(
         ),
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
     )
+}
+
+@Composable
+fun WavyEpgProgressBar(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceVariant
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "wavyProgress")
+    val phase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 2f * Math.PI.toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1400, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "phase"
+    )
+
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val width = size.width
+        val height = size.height
+        val centerY = height / 2f
+        val filledWidth = (width * progress.coerceIn(0f, 1f))
+
+        if (filledWidth < width) {
+            drawLine(
+                color = trackColor,
+                start = Offset(filledWidth, centerY),
+                end = Offset(width, centerY),
+                strokeWidth = (height * 0.5f).coerceAtLeast(2.dp.toPx()),
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        }
+
+        if (filledWidth > 0f) {
+            val wavePath = Path()
+            val waveLength = 20.dp.toPx()
+            val amplitude = (height * 0.4f).coerceAtLeast(2.dp.toPx())
+
+            wavePath.moveTo(0f, centerY)
+            var x = 0f
+            val step = 2.dp.toPx()
+            while (x <= filledWidth) {
+                val y = centerY + sin((x / waveLength) * 2f * Math.PI.toFloat() - phase) * amplitude
+                wavePath.lineTo(x, y)
+                x += step
+            }
+
+            drawPath(
+                path = wavePath,
+                color = color,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = (height * 0.7f).coerceAtLeast(2.dp.toPx()),
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun GlowEpgProgressBar(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceVariant
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "glowProgress")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glowAlpha"
+    )
+
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val width = size.width
+        val height = size.height
+        val centerY = height / 2f
+        val filledWidth = (width * progress.coerceIn(0f, 1f))
+
+        drawLine(
+            color = trackColor,
+            start = Offset(0f, centerY),
+            end = Offset(width, centerY),
+            strokeWidth = height,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+
+        if (filledWidth > 0f) {
+            val glowColor = color.copy(alpha = glowAlpha)
+            val brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                colors = listOf(color.copy(alpha = 0.6f), color, Color.White),
+                startX = 0f,
+                endX = filledWidth
+            )
+
+            drawLine(
+                color = glowColor.copy(alpha = glowAlpha * 0.5f),
+                start = Offset(0f, centerY),
+                end = Offset(filledWidth, centerY),
+                strokeWidth = height * 1.8f,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+
+            drawLine(
+                brush = brush,
+                start = Offset(0f, centerY),
+                end = Offset(filledWidth, centerY),
+                strokeWidth = height,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round
+            )
+        }
+    }
+}
+
+@Composable
+fun SolidEpgProgressBar(
+    progress: Float,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceVariant
+) {
+    LinearProgressIndicator(
+        progress = { progress.coerceIn(0f, 1f) },
+        modifier = modifier.clip(CircleShape),
+        color = color,
+        trackColor = trackColor
+    )
+}
+
+@Composable
+fun EpgProgressBar(
+    progress: Float,
+    style: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    trackColor: Color = MaterialTheme.colorScheme.surfaceVariant
+) {
+    when (style.trim().lowercase(java.util.Locale.ROOT)) {
+        "wavy", "волнистый" -> WavyEpgProgressBar(
+            progress = progress,
+            modifier = modifier,
+            color = color,
+            trackColor = trackColor
+        )
+        "glow", "glowing", "светящийся" -> GlowEpgProgressBar(
+            progress = progress,
+            modifier = modifier,
+            color = color,
+            trackColor = trackColor
+        )
+        else -> SolidEpgProgressBar(
+            progress = progress,
+            modifier = modifier,
+            color = color,
+            trackColor = trackColor
+        )
+    }
 }
