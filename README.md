@@ -1,6 +1,9 @@
 # OpenIPTVApp
+# DISCLAIMER
+> [!CAUTION]
+> This application supports a full bypass of Android Auto restrictions and may provide access to features that are not officially supported by the Android Auto platform. Use of this application is entirely at your own risk. The developer assumes no responsibility for any consequences resulting from the use of this application, including but not limited to device damage, software malfunctions,accidents, traffic law violations, property damage, or personal injury. Users are solely responsible for how they use this application and must comply with all applicable laws and road safety regulations.
 # 📺 OpenIPTV
-Opn-source IPTV player for Android, Android TV and Android Auto (test).
+Opn-source IPTV player for Android, Android TV and Android Auto.
 ---
 ## 🚀 About the project
 OpenIPTV is a lightweight and fast application for watching IPTV channels using M3U playlists.
