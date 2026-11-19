@@ -21,7 +21,10 @@ interface EpgDao {
     @Query("DELETE FROM epg_programs WHERE endTime < :cutoffTime")
     suspend fun deleteExpired(cutoffTime: Long)
 
-    @Query("SELECT * FROM epg_programs WHERE endTime > (:now - 1209600000) AND startTime < (:now + 1209600000) ORDER BY startTime ASC")
+    // ponytail: RAM guide window is -1/+2 days. The old ±14-day window materialized
+    // ~800K programmes into 3 lookup maps → Java heap OOM (~585MB) after EPG refresh.
+    // Deeper multi-day schedule should query the DB on demand instead of living in RAM.
+    @Query("SELECT * FROM epg_programs WHERE endTime > (:now - 86400000) AND startTime < (:now + 172800000) ORDER BY startTime ASC")
     suspend fun getAllValidPrograms(now: Long): List<EpgProgram>
 
     @Query("SELECT * FROM epg_programs WHERE LOWER(channelId) = LOWER(:channelId) AND endTime > :now ORDER BY startTime ASC")
