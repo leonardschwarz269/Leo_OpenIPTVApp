@@ -6,7 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.kraftplay.openiptv.model.EpgProgram
 
-@Database(entities = [EpgProgram::class], version = 1, exportSchema = false)
+@Database(entities = [EpgProgram::class], version = 2, exportSchema = false)
 abstract class EpgDatabase : RoomDatabase() {
     abstract fun epgDao(): EpgDao
 
@@ -27,7 +27,11 @@ abstract class EpgDatabase : RoomDatabase() {
                     context.applicationContext,
                     EpgDatabase::class.java,
                     "epg_database"
-                ).build()
+                )
+                    // EPG is a re-downloadable cache: on schema change wipe and rebuild
+                    // instead of migrating (v2 adds dedup + query indices).
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }
