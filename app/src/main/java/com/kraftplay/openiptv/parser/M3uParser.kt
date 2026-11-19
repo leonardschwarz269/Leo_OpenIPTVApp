@@ -35,7 +35,7 @@ object M3uParser {
                         extractAttribute(trimmedLine, "x-tvg-url=")?.let { addEpgUrls(it, epgUrls) }
                     }
                     lowerLine.startsWith("#extinf:") || lowerLine.startsWith("#extinf ") -> {
-                        currentName = trimmedLine.substringAfterLast(",").trim()
+                        currentName = channelName(trimmedLine)
                         currentLogo = extractAttribute(trimmedLine, "tvg-logo=").orEmpty()
                         currentCategory = extractAttribute(trimmedLine, "group-title=").orEmpty()
                         currentEpgId = extractAttribute(trimmedLine, "tvg-id=").orEmpty()
@@ -88,6 +88,20 @@ object M3uParser {
                 destination.add(cleanUrl)
             }
         }
+    }
+
+    // ponytail: name = text after FIRST comma outside quotes; commas inside quoted attrs are skipped
+    private fun channelName(line: String): String {
+        var quoteChar = 0.toChar()
+        for (i in line.indices) {
+            val c = line[i]
+            when {
+                quoteChar != 0.toChar() -> if (c == quoteChar) quoteChar = 0.toChar()
+                c == '"' || c == '\'' -> quoteChar = c
+                c == ',' -> return line.substring(i + 1).trim()
+            }
+        }
+        return line.substringAfterLast(',').trim()
     }
 
     private fun extractAttribute(line: String, key: String): String? {
