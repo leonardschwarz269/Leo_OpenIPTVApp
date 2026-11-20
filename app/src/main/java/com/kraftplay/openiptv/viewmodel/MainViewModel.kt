@@ -1004,6 +1004,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val now = System.currentTimeMillis()
                 runCatching { epgDao.pruneWindow(now - 30L * 24L * 60L * 60L * 1000L, now + 30L * 24L * 60L * 60L * 1000L) }
+                // Reclaim the WAL after bulk EPG writes. Without this, epg_database-wal grows
+                // unbounded (observed 4.4GB) because compactStorage was only wired to dead code.
+                // ponytail: VACUUM-per-refresh is the ceiling; make periodic if refresh latency matters.
+                runCatching { EpgDatabase.getDatabase(getApplication()).compactStorage() }
                 val updatedSources = _epgSources.value.map { source ->
                     if (enabledSources.any { it.id == source.id }) source.copy(lastUpdatedTime = now) else source
                 }
