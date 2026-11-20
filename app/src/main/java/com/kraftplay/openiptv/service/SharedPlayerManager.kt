@@ -12,7 +12,10 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
+import androidx.media3.exoplayer.mediacodec.MediaCodecUtil
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.kraftplay.openiptv.model.IptvChannel
 
@@ -51,12 +54,27 @@ object SharedPlayerManager {
         val mediaSourceFactory = DefaultMediaSourceFactory(appContext)
             .setDataSourceFactory(httpDataSourceFactory)
 
+        // Настройка "hardware_decoder": Auto/HW — аппаратный с fallback, SW — только программные
+        val decoderMode = DecoderMode.fromSetting(
+            appContext.getSharedPreferences("iptv_prefs", Context.MODE_PRIVATE)
+                .getString("hardware_decoder", "Auto") ?: "Auto"
+        )
+        val renderersFactory = DefaultRenderersFactory(appContext)
+            .setEnableDecoderFallback(true)
+        if (decoderMode == DecoderMode.Mode.SOFTWARE) {
+            renderersFactory.setMediaCodecSelector { mimeType, requiresSecureDecoder, requiresTunnelingDecoder ->
+                MediaCodecUtil.getDecoderInfos(mimeType, requiresSecureDecoder, requiresTunnelingDecoder)
+                    .filter { it.softwareOnly }
+            }
+        }
+
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)
             .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
             .build()
 
         return ExoPlayer.Builder(appContext)
+            .setRenderersFactory(renderersFactory)
             .setLoadControl(loadControl)
             .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)

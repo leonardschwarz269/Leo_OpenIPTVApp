@@ -15,6 +15,7 @@ import com.kraftplay.openiptv.model.isKitTvPlaylist
 import com.kraftplay.openiptv.util.EpgMatcher
 import com.kraftplay.openiptv.parser.M3uParser
 import com.kraftplay.openiptv.parser.XmlTvParser
+import com.kraftplay.openiptv.service.SharedPlayerManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -1003,6 +1004,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 val now = System.currentTimeMillis()
                 runCatching { epgDao.pruneWindow(now - 30L * 24L * 60L * 60L * 1000L, now + 30L * 24L * 60L * 60L * 1000L) }
+                // Disk is bounded by JournalMode.TRUNCATE (no WAL). No VACUUM here: on a large
+                // EPG DB it blocks every reader for minutes. Free pages are reused by SQLite.
                 val updatedSources = _epgSources.value.map { source ->
                     if (enabledSources.any { it.id == source.id }) source.copy(lastUpdatedTime = now) else source
                 }
@@ -1207,7 +1210,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     "category_display_mode" -> categoryDisplayMode.value = value
                     "catchup_mode" -> catchupMode.value = value
                     "aspect_ratio_mode" -> aspectRatioMode.value = value
-                    "hardware_decoder" -> hardwareDecoder.value = value
+                    "hardware_decoder" -> {
+                        hardwareDecoder.value = value
+                        // Плеер пересоздастся с новым режимом декодера при следующем запуске
+                        SharedPlayerManager.releasePlayer()
+                    }
                     "epg_update_interval" -> epgUpdateInterval.value = value
                     "epg_progress_style" -> epgProgressStyle.value = value
                     "player_glass_tint" -> playerGlassTint.value = value
