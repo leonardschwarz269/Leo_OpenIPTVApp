@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,16 +8,41 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// Release signing: keystore.properties (gitignored) или env KEYSTORE_*; без ключа — unsigned APK
+val keystoreProps = Properties()
+val keystorePropsFile = rootProject.file("keystore.properties")
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.inputStream().use { keystoreProps.load(it) }
+}
+val hasReleaseKey = keystoreProps.getProperty("storeFile") != null ||
+    System.getenv("KEYSTORE_FILE") != null
+
 android {
     namespace = "com.kraftplay.openiptv"
     compileSdk = 35
+
+    if (hasReleaseKey) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(
+                    keystoreProps.getProperty("storeFile") ?: System.getenv("KEYSTORE_FILE")!!
+                )
+                storePassword = keystoreProps.getProperty("storePassword")
+                    ?: System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                    ?: System.getenv("KEY_ALIAS")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+                    ?: System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "com.kraftplay.openiptv"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 17
+        versionName = "6.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -26,10 +53,18 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (hasReleaseKey) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            // Тестовая сборка ставится РЯДОМ с оригинальным OpenIPTV, не поверх него
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
         }
     }
     compileOptions {
@@ -39,6 +74,12 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+    // ponytail: Instantiatable — false positive для legacy aauto.aar CarActivity (суперкласс
+    // из старого Android Auto SDK не виден lint'у). Отключён точечно; вернуть при переходе на androidx.car.app.
+    lint {
+        disable += "Instantiatable"
+        abortOnError = true
     }
     buildFeatures {
         compose = true
