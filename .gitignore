@@ -1,0 +1,31 @@
+# Gradle / build outputs
+.gradle/
+build/
+**/build/
+/kotlin/
+/compileDebugKotlin/
+/kotlinToolingMetadata/
+/reports/
+/problems/
+
+# Local config (SDK path, machine-specific)
+local.properties
+keystore.properties
+
+# IDE
+.idea/
+*.iml
+.cxx/
+.externalNativeBuild/
+captures/
+
+# Binaries / archives not for VCS
+*.apk
+*.aab
+*.jks
+*.keystore
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db

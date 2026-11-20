@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.kraftplay.openiptv">
+
+    <!-- ==================== РАЗРЕШЕНИЯ ==================== -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
+    <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
+
+    <!-- ==================== ФУНКЦИИ УСТРОЙСТВА ==================== -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.type.automotive" android:required="false" />
+
+    <!-- ==================== ПРИЛОЖЕНИЕ ==================== -->
+    <application
+        android:allowBackup="false"
+        android:largeHeap="true"
+        android:hardwareAccelerated="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:banner="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <!-- Метаданные LSPosed / Xposed -->
+        <meta-data android:name="xposedmodule" android:value="true" />
+        <meta-data android:name="xposeddescription" android:value="OpenIPTV Android Auto Integration &amp; Unlocker" />
+        <meta-data android:name="xposedminversion" android:value="82" />
+        <meta-data android:name="xposedscope" android:resource="@array/xposed_scope" />
+
+        <!-- ==================== METADATA ДЛЯ ANDROID AUTO ==================== -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
+        <meta-data
+            android:name="com.google.android.gms.car.notification.SmallIcon"
+            android:resource="@mipmap/ic_launcher" />
+
+        <meta-data
+            android:name="distractionOptimized"
+            android:value="true" />
+
+        <meta-data
+            android:name="androidx.car.app.minCarApiLevel"
+            android:value="1" />
+
+        <!-- ==================== ACTIVITIES ==================== -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:supportsPictureInPicture="true"
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|layoutDirection|keyboard|keyboardHidden|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <category android:name="de.robv.android.xposed.category.MODULE" />
+            </intent-filter>
+        </activity>
+
+        <!-- Android Auto CarActivity: Полноценный ТВ-интерфейс OpenIPTV (запускается через OpenIptvCarService) -->
+        <activity
+            android:name=".auto.OpenIptvCarActivity"
+            android:exported="false"
+            android:label="@string/app_name_auto"
+            android:icon="@mipmap/ic_launcher"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|layoutDirection|keyboard|keyboardHidden|uiMode">
+            <meta-data
+                android:name="distractionOptimized"
+                android:value="true" />
+        </activity>
+
+        <!-- Android Auto CarActivityFS: Полноэкранный ТВ-интерфейс OpenIPTV (запускается через OpenIptvCarServiceFS) -->
+        <activity
+            android:name=".auto.OpenIptvCarActivityFS"
+            android:exported="false"
+            android:label="OpenFullScreen"
+            android:icon="@mipmap/ic_launcher"
+            android:theme="@android:style/Theme.Material.NoActionBar"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|layoutDirection|keyboard|keyboardHidden|uiMode">
+            <meta-data
+                android:name="distractionOptimized"
+                android:value="true" />
+        </activity>
+
+        <!-- Android Auto MirrorActivity: Зеркалирование экрана телефона (запускается через OpenIptvMirrorService) -->
+        <activity
+            android:name=".auto.OpenIptvMirrorActivity"
+            android:exported="false"
+            android:label="@string/app_name_mirror"
+            android:icon="@mipmap/ic_launcher"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|layoutDirection|keyboard|keyboardHidden|uiMode">
+            <meta-data
+                android:name="distractionOptimized"
+                android:value="true" />
+        </activity>
+
+        <activity
+            android:name=".auto.MirrorProjectionActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- ==================== СЕРВИСЫ ANDROID AUTO ==================== -->
+
+        <!-- 1. OpenIPTV CarService (запуск OpenIptvCarActivity на экране авто) -->
+        <service
+            android:name=".auto.OpenIptvCarService"
+            android:exported="true"
+            android:label="@string/app_name_auto"
+            android:icon="@mipmap/ic_launcher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION" />
+                <category android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM" />
+            </intent-filter>
+        </service>
+
+        <!-- 2. OpenIPTV Fullscreen CarService (Полноэкранный вариант без Google Карт) -->
+        <service
+            android:name=".auto.OpenIptvCarServiceFS"
+            android:exported="true"
+            android:label="OpenFullScreen"
+            android:icon="@mipmap/ic_launcher">
+            <intent-filter>
+                <action android:name="androidx.car.app.CarAppService" />
+                <category android:name="androidx.car.app.category.NAVIGATION" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.car.app.minCarApiLevel"
+                android:value="1" />
+        </service>
+
+        <!-- 3. OpenIPTV MirrorService (запуск OpenIptvMirrorActivity на экране авто) -->
+        <service
+            android:name=".auto.OpenIptvMirrorService"
+            android:exported="true"
+            android:label="@string/app_name_mirror"
+            android:icon="@mipmap/ic_launcher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION" />
+                <category android:name="com.google.android.gms.car.category.CATEGORY_PROJECTION_OEM" />
+            </intent-filter>
+        </service>
+
+        <!-- 4. OpenIPTV Audio (медиабраузер фонового воспроизведения звука) -->
+        <service
+            android:name=".service.PlaybackService"
+            android:exported="true"
+            android:label="@string/app_name_audio"
+            android:icon="@mipmap/ic_launcher"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".auto.MirrorProjectionService"
+            android:foregroundServiceType="mediaProjection"
+            android:exported="false" />
+
+        <service
+            android:name=".auto.TouchInjectionService"
+            android:label="@string/app_name_mirror"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <receiver
+            android:name=".service.EpgReminderReceiver"
+            android:exported="false" />
+
+    </application>
+</manifest>

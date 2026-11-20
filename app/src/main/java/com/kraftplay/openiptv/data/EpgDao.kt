@@ -1,0 +1,41 @@
+package com.kraftplay.openiptv.data
+
+import androidx.room.*
+import com.kraftplay.openiptv.model.EpgProgram
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface EpgDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(programs: List<EpgProgram>)
+
+    @Query("DELETE FROM epg_programs")
+    suspend fun deleteAll()
+
+    @Query("SELECT COUNT(*) FROM epg_programs")
+    suspend fun getProgramCount(): Int
+
+    @Query("DELETE FROM epg_programs WHERE endTime < :cutoffTime OR startTime > :futureLimit")
+    suspend fun pruneWindow(cutoffTime: Long, futureLimit: Long)
+
+    @Query("DELETE FROM epg_programs WHERE endTime < :cutoffTime")
+    suspend fun deleteExpired(cutoffTime: Long)
+
+    // ponytail: RAM guide window is -1/+2 days. The old ±14-day window materialized
+    // ~800K programmes into 3 lookup maps → Java heap OOM (~585MB) after EPG refresh.
+    // Deeper multi-day schedule should query the DB on demand instead of living in RAM.
+    @Query("SELECT * FROM epg_programs WHERE endTime > (:now - 86400000) AND startTime < (:now + 172800000) ORDER BY startTime ASC")
+    suspend fun getAllValidPrograms(now: Long): List<EpgProgram>
+
+    @Query("SELECT * FROM epg_programs WHERE LOWER(channelId) = LOWER(:channelId) AND endTime > :now ORDER BY startTime ASC")
+    fun getUpcomingPrograms(channelId: String, now: Long): Flow<List<EpgProgram>>
+
+    @Query("SELECT * FROM epg_programs WHERE LOWER(channelId) = LOWER(:channelId) AND startTime <= :now AND endTime > :now LIMIT 1")
+    suspend fun getCurrentProgram(channelId: String, now: Long): EpgProgram?
+
+    @Query("SELECT * FROM epg_programs WHERE LOWER(channelId) = LOWER(:channelId) AND startTime > :now ORDER BY startTime ASC LIMIT 1")
+    suspend fun getNextProgram(channelId: String, now: Long): EpgProgram?
+
+    @Query("SELECT * FROM epg_programs WHERE (LOWER(title) LIKE '%' || LOWER(:query) || '%' OR LOWER(description) LIKE '%' || LOWER(:query) || '%') AND endTime > (:now - 2592000000) ORDER BY startTime ASC LIMIT 300")
+    suspend fun searchPrograms(query: String, now: Long): List<EpgProgram>
+}
