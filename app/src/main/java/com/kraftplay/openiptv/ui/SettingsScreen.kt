@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.kraftplay.openiptv.BuildConfig
 import com.kraftplay.openiptv.R
 import com.kraftplay.openiptv.lsposed.LSPosedStatus
 import com.kraftplay.openiptv.model.CustomThemeConfig
@@ -400,7 +401,7 @@ fun SettingsScreen(
                             stats = listOf(
                                 "Плейлисты" to "${playlists.count { it.enabled }}",
                                 "EPG" to "${epgSources.count { it.enabled }}",
-                                tr("Версия") to "6.0",
+                                tr("Версия") to BuildConfig.VERSION_NAME,
                                 "Тема" to themeMode
                             ),
                             badgeShape = badgeShape,
@@ -1508,7 +1509,7 @@ fun SettingsScreen(
 
                                         ActionItem(
                                             icon = Icons.Rounded.Info,
-                                            title = tr("Версия {0}", "6.0"),
+                                            title = tr("Версия {0}", BuildConfig.VERSION_NAME),
                                             subtitle = "OpenIPTV • Material You 3 Expressive",
                                             onClick = {},
                                             shapeName = badgeShape,

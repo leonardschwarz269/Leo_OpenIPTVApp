@@ -1,5 +1,8 @@
 package com.kraftplay.openiptv.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -61,6 +64,7 @@ import com.kraftplay.openiptv.model.IptvChannel
 import com.kraftplay.openiptv.service.EpgReminderManager
 import com.kraftplay.openiptv.viewmodel.MainViewModel
 import com.kraftplay.openiptv.util.CatchupUrlBuilder
+import com.kraftplay.openiptv.util.shouldRequestNotificationPermission
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
@@ -195,6 +199,21 @@ fun MainScreen(
             viewModel.importPlaylistFile(selected, name)
         }
     }
+    // Напоминания: на Android 13+ сначала запрос POST_NOTIFICATIONS, планирование после grant
+    var pendingReminder by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) pendingReminder?.invoke()
+        pendingReminder = null
+    }
+    val scheduleReminderWithPermission: (() -> Unit) -> Unit = { schedule ->
+        val granted = context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        if (shouldRequestNotificationPermission(Build.VERSION.SDK_INT, granted)) {
+            pendingReminder = schedule
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            schedule()
+        }
+    }
     var tempPlaylistName by remember { mutableStateOf("") }
     var tempPlaylistUrl by remember { mutableStateOf("") }
 
@@ -293,6 +312,15 @@ fun MainScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (isEpgLoading) ExpressiveLoadingIndicator(size = 28.dp, strokeWidth = 3.dp)
+                        if (channels.isNotEmpty()) {
+                            IconButton(onClick = {
+                                tempPlaylistName = ""
+                                tempPlaylistUrl = ""
+                                showAddPlaylistDialog = true
+                            }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Default.PlaylistAdd, stringResource(R.string.new_playlist), modifier = Modifier.size(20.dp))
+                            }
+                        }
                         IconButton(onClick = {
                             if (isAuto) {
                                 showCarKeyboardDialog = true
@@ -735,14 +763,16 @@ fun MainScreen(
                                         }
                                     }
                                     IconButton(onClick = {
-                                        EpgReminderManager.scheduleReminder(
-                                            context = context,
-                                            programTitle = program.title,
-                                            channelName = program.channelId,
-                                            channelUrl = matchedChannel?.url ?: "",
-                                            startTimeMs = program.startTime
-                                        )
-                                        Toast.makeText(context, context.getString(R.string.reminder_set), Toast.LENGTH_SHORT).show()
+                                        scheduleReminderWithPermission {
+                                            EpgReminderManager.scheduleReminder(
+                                                context = context,
+                                                programTitle = program.title,
+                                                channelName = program.channelId,
+                                                channelUrl = matchedChannel?.url ?: "",
+                                                startTimeMs = program.startTime
+                                            )
+                                            Toast.makeText(context, context.getString(R.string.reminder_set), Toast.LENGTH_SHORT).show()
+                                        }
                                     }) {
                                         Icon(Icons.Default.NotificationsActive, stringResource(R.string.set_reminder))
                                     }
@@ -1022,14 +1052,16 @@ fun MainScreen(
                                         }
                                     }
                                     IconButton(onClick = {
-                                        EpgReminderManager.scheduleReminder(
-                                            context = context,
-                                            programTitle = program.title,
-                                            channelName = channel.name,
-                                            channelUrl = channel.url,
-                                            startTimeMs = program.startTime
-                                        )
-                                        Toast.makeText(context, context.getString(R.string.reminder_set), Toast.LENGTH_SHORT).show()
+                                        scheduleReminderWithPermission {
+                                            EpgReminderManager.scheduleReminder(
+                                                context = context,
+                                                programTitle = program.title,
+                                                channelName = channel.name,
+                                                channelUrl = channel.url,
+                                                startTimeMs = program.startTime
+                                            )
+                                            Toast.makeText(context, context.getString(R.string.reminder_set), Toast.LENGTH_SHORT).show()
+                                        }
                                     }) {
                                         Icon(Icons.Default.NotificationsActive, stringResource(R.string.set_reminder))
                                     }
