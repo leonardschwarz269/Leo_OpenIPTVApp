@@ -80,8 +80,8 @@ fun getCategoryDisplayName(category: String): String {
     }
 }
 
-internal fun topBarTargetSize(isAuto: Boolean): Dp = if (isAuto) 56.dp else 48.dp
-internal fun topBarIconSize(isAuto: Boolean): Dp = if (isAuto) 28.dp else 24.dp
+internal fun topBarTargetSize(isAuto: Boolean): Dp = ScreenPresets.targetSize(isAuto).dp
+internal fun topBarIconSize(isAuto: Boolean): Dp = ScreenPresets.iconSize(isAuto).dp
 
 @Composable
 internal fun TopBarActions(
@@ -104,7 +104,8 @@ internal fun TopBarActions(
     val icon = topBarIconSize(isAuto)
     Row(
         modifier = Modifier.horizontalScroll(rememberScrollState()),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ScreenPresets.gap(isAuto).dp)
     ) {
         if (isEpgLoading) ExpressiveLoadingIndicator(size = 28.dp, strokeWidth = 3.dp)
         if (showAddPlaylist) {
@@ -242,6 +243,7 @@ fun MainScreen(
     val listSize by viewModel.listSize.collectAsState()
     val isEpgLoading by viewModel.isEpgLoading.collectAsState()
     val channelViewingTimes by viewModel.channelViewingTimes.collectAsState()
+    val recentChannels by viewModel.recentChannels.collectAsState()
     val uiStyle by viewModel.uiStyle.collectAsState()
     val catchupMode by viewModel.catchupMode.collectAsState()
     val showChannelNumbers by viewModel.showChannelNumbers.collectAsState()
@@ -582,6 +584,25 @@ fun MainScreen(
                                 border = null
                             )
                         }
+                    }
+
+                    if (selectedCategory == "All" && searchQuery.isEmpty()) {
+                        ContinueWatchingRow(
+                            channels = recentChannels,
+                            viewingTimes = channelViewingTimes,
+                            currentPrograms = currentPrograms,
+                            nextPrograms = nextPrograms,
+                            fontSize = fontSize,
+                            onChannelClick = { channel ->
+                                if (channel.isLocked) {
+                                    showPasswordDialog = Triple(channel, "play", "")
+                                } else {
+                                    onChannelClick(channel)
+                                    viewModel.updateSetting("last_channel_url", channel.url)
+                                }
+                            },
+                            onLongClick = { showChannelMenu = it }
+                        )
                     }
 
                     if (isLoading) {
@@ -1605,6 +1626,45 @@ fun TvMenuItem(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
+        }
+    }
+}
+
+@Composable
+internal fun ContinueWatchingRow(
+    channels: List<IptvChannel>,
+    viewingTimes: Map<String, Long>,
+    currentPrograms: Map<String, EpgProgram>,
+    nextPrograms: Map<String, EpgProgram>,
+    fontSize: Float,
+    onChannelClick: (IptvChannel) -> Unit,
+    onLongClick: (IptvChannel) -> Unit
+) {
+    val items = com.kraftplay.openiptv.util.continueWatchingChannels(channels, viewingTimes)
+    if (items.isEmpty()) return
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+        Text(
+            text = stringResource(R.string.continue_watching),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(items, key = { it.url }) { channel ->
+                Box(modifier = Modifier.width(200.dp)) {
+                    ChannelCard(
+                        channel = channel,
+                        currentProgram = currentPrograms[channel.url],
+                        nextProgram = nextPrograms[channel.url],
+                        viewingTime = viewingTimes[channel.url] ?: 0L,
+                        fontSize = fontSize,
+                        listSize = "Compact",
+                        uiStyle = "Material",
+                        onClick = { onChannelClick(channel) },
+                        onLongClick = { onLongClick(channel) }
+                    )
+                }
+            }
         }
     }
 }

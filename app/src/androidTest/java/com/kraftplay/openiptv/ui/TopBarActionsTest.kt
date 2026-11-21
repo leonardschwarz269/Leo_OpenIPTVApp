@@ -65,13 +65,13 @@ class TopBarActionsTest {
     }
 
     @Test
-    fun autoActionsHaveAtLeast56dpTouchTargets() {
+    fun autoActionsHaveAtLeast64dpTouchTargets() {
         render(isAuto = true)
         val descriptions = localizedDescriptions + listOf("YouTube", "RuTube", "Browser")
         for (description in descriptions) {
             rule.onNodeWithContentDescription(description)
-                .assertWidthIsAtLeast(56.dp)
-                .assertHeightIsAtLeast(56.dp)
+                .assertWidthIsAtLeast(64.dp)
+                .assertHeightIsAtLeast(64.dp)
         }
     }
 

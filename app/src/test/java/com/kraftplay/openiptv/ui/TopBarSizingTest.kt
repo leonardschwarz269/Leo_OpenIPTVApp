@@ -16,11 +16,11 @@ class TopBarSizingTest {
 
     @Test
     fun `auto touch target is larger than phone`() {
-        assertEquals(56f, topBarTargetSize(isAuto = true).value, 0f)
+        assertEquals(64f, topBarTargetSize(isAuto = true).value, 0f)
     }
 
     @Test
     fun `auto icon is enlarged to 28dp`() {
-        assertEquals(28f, topBarIconSize(isAuto = true).value, 0f)
+        assertEquals(32f, topBarIconSize(isAuto = true).value, 0f)
     }
 }
