@@ -6,7 +6,7 @@
 ## 📺 OpenIPTV
 
 IPTV-плеер для Android, Android TV и экспериментального Android Auto.
-Текущая версия: **6.1.0**.
+Текущая версия: **6.1.1**.
 
 Проект основан на [OpenIPTV](https://github.com/redmi9cnfc/OpenIPTVApp); сведения об исходных компонентах и лицензиях — в [NOTICE.md](NOTICE.md).
 
@@ -37,7 +37,7 @@ OpenIPTV — лёгкое приложение для просмотра IPTV-к
 - Требуется Android 7.0 или выше.
 - Установите подписанный APK; для установки вне магазина разрешите установку из выбранного источника.
 - Если установлена оригинальная версия с другой подписью, сначала удалите её.
-- Готовый подписанный APK доступен в [Releases](https://github.com/leonardschwarz269/Leo_OpenIPTVApp/releases) (текущий: [v6.1.0](https://github.com/leonardschwarz269/Leo_OpenIPTVApp/releases/tag/v6.1.0)).
+- Готовый подписанный APK доступен в [Releases](https://github.com/leonardschwarz269/Leo_OpenIPTVApp/releases) (текущий: [v6.1.1](https://github.com/leonardschwarz269/Leo_OpenIPTVApp/releases/tag/v6.1.1)).
 
 ## 🛠 Сборка
 

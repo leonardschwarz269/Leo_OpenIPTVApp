@@ -82,6 +82,8 @@ fun getCategoryDisplayName(category: String): String {
 
 internal fun topBarTargetSize(isAuto: Boolean): Dp = ScreenPresets.targetSize(isAuto).dp
 internal fun topBarIconSize(isAuto: Boolean): Dp = ScreenPresets.iconSize(isAuto).dp
+internal fun categoryChipLabelFontSize(userFontSize: Float, isAuto: Boolean): Float =
+    maxOf(userFontSize - 2f, if (isAuto) 24f else 16f)
 
 @Composable
 internal fun TopBarActions(
@@ -518,18 +520,19 @@ fun MainScreen(
                             FilterChip(
                                 selected = category == selectedCategory,
                                 onClick = handleChipClick,
-                                label = { Text(getCategoryDisplayName(category), fontSize = (fontSize - 2).sp) },
+                                label = { Text(getCategoryDisplayName(category), fontSize = categoryChipLabelFontSize(fontSize, isAuto).sp) },
                                 leadingIcon = { 
                                     when(category) {
-                                        "Favorites" -> Icon(Icons.Default.Favorite, null, modifier = Modifier.size(16.dp))
-                                        "Recent" -> Icon(Icons.Default.History, null, modifier = Modifier.size(16.dp))
-                                        "Prisma" -> Icon(Icons.Default.Public, null, modifier = Modifier.size(16.dp), tint = Color(0xFF4285F4))
+                                        "Favorites" -> Icon(Icons.Default.Favorite, null, modifier = Modifier.size(ScreenPresets.iconSize(isAuto).dp))
+                                        "Recent" -> Icon(Icons.Default.History, null, modifier = Modifier.size(ScreenPresets.iconSize(isAuto).dp))
+                                        "Prisma" -> Icon(Icons.Default.Public, null, modifier = Modifier.size(ScreenPresets.iconSize(isAuto).dp), tint = Color(0xFF4285F4))
                                     }
                                 },
                                 trailingIcon = if (isFolderLocked) {
-                                    { Icon(Icons.Default.Lock, contentDescription = "Locked", modifier = Modifier.size(14.dp)) }
+                                    { Icon(Icons.Default.Lock, contentDescription = "Locked", modifier = Modifier.size((ScreenPresets.iconSize(isAuto) - 4).dp)) }
                                 } else null,
                                 modifier = Modifier
+                                    .heightIn(min = ScreenPresets.targetSize(isAuto).dp)
                                     .onFocusChanged { isFocused = it.isFocused }
                                     .scale(if (isFocused) 1.1f else 1f)
                                     .border(
