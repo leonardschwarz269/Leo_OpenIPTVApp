@@ -53,6 +53,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -76,6 +77,78 @@ fun getCategoryDisplayName(category: String): String {
         "Favorites" -> stringResource(R.string.cat_favorites)
         "Recent" -> stringResource(R.string.cat_recent)
         else -> category
+    }
+}
+
+internal fun topBarTargetSize(isAuto: Boolean): Dp = if (isAuto) 56.dp else 48.dp
+internal fun topBarIconSize(isAuto: Boolean): Dp = if (isAuto) 28.dp else 24.dp
+
+@Composable
+internal fun TopBarActions(
+    isAuto: Boolean,
+    showAddPlaylist: Boolean,
+    isEpgLoading: Boolean,
+    categoryDisplayMode: String,
+    onAddPlaylist: () -> Unit,
+    onSearch: () -> Unit,
+    onVoiceSearch: () -> Unit,
+    onToggleDisplayMode: () -> Unit,
+    onEpgSearch: () -> Unit,
+    onRefresh: () -> Unit,
+    onSettings: () -> Unit,
+    onYouTube: (() -> Unit)? = null,
+    onRuTube: (() -> Unit)? = null,
+    onBrowser: (() -> Unit)? = null
+) {
+    val target = topBarTargetSize(isAuto)
+    val icon = topBarIconSize(isAuto)
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (isEpgLoading) ExpressiveLoadingIndicator(size = 28.dp, strokeWidth = 3.dp)
+        if (showAddPlaylist) {
+            IconButton(onClick = onAddPlaylist, modifier = Modifier.size(target).tvFocusable()) {
+                Icon(Icons.Default.PlaylistAdd, stringResource(R.string.new_playlist), modifier = Modifier.size(icon))
+            }
+        }
+        IconButton(onClick = onSearch, modifier = Modifier.size(target).tvFocusable()) {
+            Icon(Icons.Default.Search, stringResource(R.string.search), modifier = Modifier.size(icon))
+        }
+        IconButton(onClick = onVoiceSearch, modifier = Modifier.size(target).tvFocusable()) {
+            Icon(Icons.Default.Mic, "Voice Search", modifier = Modifier.size(icon))
+        }
+        IconButton(onClick = onToggleDisplayMode, modifier = Modifier.size(target).tvFocusable()) {
+            Icon(
+                if (categoryDisplayMode == "Chips") Icons.Default.Folder else Icons.Default.ViewStream,
+                "Toggle Display Mode",
+                modifier = Modifier.size(icon)
+            )
+        }
+        IconButton(onClick = onEpgSearch, modifier = Modifier.size(target).tvFocusable()) {
+            Icon(Icons.Default.ManageSearch, stringResource(R.string.epg_search), modifier = Modifier.size(icon))
+        }
+        IconButton(onClick = onRefresh, modifier = Modifier.size(target).tvFocusable()) {
+            Icon(Icons.Default.Refresh, "Refresh", modifier = Modifier.size(icon))
+        }
+        if (isAuto && onYouTube != null) {
+            IconButton(onClick = onYouTube, modifier = Modifier.size(target).tvFocusable()) {
+                Icon(Icons.Default.PlayCircle, "YouTube", tint = Color(0xFFFF0000), modifier = Modifier.size(icon))
+            }
+        }
+        if (isAuto && onRuTube != null) {
+            IconButton(onClick = onRuTube, modifier = Modifier.size(target).tvFocusable()) {
+                Icon(Icons.Default.OndemandVideo, "RuTube", tint = Color(0xFF00A2E8), modifier = Modifier.size(icon))
+            }
+        }
+        if (isAuto && onBrowser != null) {
+            IconButton(onClick = onBrowser, modifier = Modifier.size(target).tvFocusable()) {
+                Icon(Icons.Default.Public, "Browser", tint = Color(0xFF4285F4), modifier = Modifier.size(icon))
+            }
+        }
+        IconButton(onClick = onSettings, modifier = Modifier.size(target).tvFocusable()) {
+            Icon(Icons.Default.Settings, stringResource(R.string.settings), modifier = Modifier.size(icon))
+        }
     }
 }
 
@@ -307,30 +380,24 @@ fun MainScreen(
                     }
                 },
                 actions = {
-                    Row(
-                        modifier = Modifier.horizontalScroll(rememberScrollState()),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (isEpgLoading) ExpressiveLoadingIndicator(size = 28.dp, strokeWidth = 3.dp)
-                        if (channels.isNotEmpty()) {
-                            IconButton(onClick = {
-                                tempPlaylistName = ""
-                                tempPlaylistUrl = ""
-                                showAddPlaylistDialog = true
-                            }, modifier = Modifier.size(36.dp)) {
-                                Icon(Icons.Default.PlaylistAdd, stringResource(R.string.new_playlist), modifier = Modifier.size(20.dp))
-                            }
-                        }
-                        IconButton(onClick = {
+                    TopBarActions(
+                        isAuto = isAuto,
+                        showAddPlaylist = channels.isNotEmpty(),
+                        isEpgLoading = isEpgLoading,
+                        categoryDisplayMode = categoryDisplayMode,
+                        onAddPlaylist = {
+                            tempPlaylistName = ""
+                            tempPlaylistUrl = ""
+                            showAddPlaylistDialog = true
+                        },
+                        onSearch = {
                             if (isAuto) {
                                 showCarKeyboardDialog = true
                             } else {
                                 isSearchExpanded = !isSearchExpanded
                             }
-                        }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.Search, stringResource(R.string.search), modifier = Modifier.size(20.dp))
-                        }
-                        IconButton(onClick = {
+                        },
+                        onVoiceSearch = {
                             com.kraftplay.openiptv.util.VoiceInputHelper.startSpeechRecognition(
                                 context = context,
                                 onResult = { query ->
@@ -338,62 +405,21 @@ fun MainScreen(
                                     viewModel.updateSearchQuery(query)
                                 }
                             )
-                        }, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.Mic,
-                                contentDescription = "Voice Search",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        IconButton(onClick = {
+                        },
+                        onToggleDisplayMode = {
                             val nextMode = if (categoryDisplayMode == "Chips") "Folders" else "Chips"
                             viewModel.setCategoryDisplayMode(nextMode)
-                        }) {
-                            Icon(if (categoryDisplayMode == "Chips") Icons.Default.Folder else Icons.Default.ViewStream, "Toggle Display Mode")
-                        }
-                        IconButton(onClick = { showEpgSearchDialog = true }, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.ManageSearch, stringResource(R.string.epg_search), modifier = Modifier.size(20.dp))
-                        }
-                        IconButton(onClick = {
+                        },
+                        onEpgSearch = { showEpgSearchDialog = true },
+                        onRefresh = {
                             playlists.find { it.isSelected }?.let { viewModel.loadPlaylist(it.url) }
                             viewModel.refreshAllEpg()
-                        }) {
-                            Icon(Icons.Default.Refresh, "Refresh", modifier = Modifier.size(20.dp))
-                        }
-                        if (isAuto && onYouTubeClick != null) {
-                            IconButton(onClick = onYouTubeClick, modifier = Modifier.size(36.dp)) {
-                                Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.Default.PlayCircle,
-                                    contentDescription = "YouTube",
-                                    tint = androidx.compose.ui.graphics.Color(0xFFFF0000),
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                        if (isAuto && onRuTubeClick != null) {
-                            IconButton(onClick = onRuTubeClick, modifier = Modifier.size(36.dp)) {
-                                Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.Default.OndemandVideo,
-                                    contentDescription = "RuTube",
-                                    tint = androidx.compose.ui.graphics.Color(0xFF00A2E8),
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                        if (isAuto && onBrowserClick != null) {
-                            IconButton(onClick = onBrowserClick, modifier = Modifier.size(36.dp)) {
-                                Icon(
-                                    imageVector = androidx.compose.material.icons.Icons.Default.Public,
-                                    contentDescription = "Browser",
-                                    tint = androidx.compose.ui.graphics.Color(0xFF4285F4),
-                                    modifier = Modifier.size(22.dp)
-                                )
-                            }
-                        }
-                        IconButton(onClick = onSettingsClick, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings), modifier = Modifier.size(20.dp))
-                        }
-                    }
+                        },
+                        onSettings = onSettingsClick,
+                        onYouTube = onYouTubeClick,
+                        onRuTube = onRuTubeClick,
+                        onBrowser = onBrowserClick
+                    )
                 }
             )
         }

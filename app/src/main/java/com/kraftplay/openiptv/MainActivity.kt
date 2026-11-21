@@ -362,7 +362,10 @@ fun OpenIptvApp(
         composable("prisma") {
             onPlayingStateChanged(true)
             com.kraftplay.openiptv.ui.BrowserScreen(
-                initialUrl = "https://prisma.ws/",
+                // ponytail: prisma.ws currently serves a cert for *.a.trbcdn.net, so HTTPS fails.
+                // Intentional cleartext entry for this host only; no global TLS bypass.
+                // Upgrade to https://prisma.ws/ when the site fixes its certificate.
+                initialUrl = "http://prisma.ws/",
                 onBack = { navController.popBackStack() }
             )
         }

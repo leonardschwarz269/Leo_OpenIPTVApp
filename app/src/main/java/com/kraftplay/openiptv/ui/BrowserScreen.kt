@@ -1,14 +1,19 @@
 package com.kraftplay.openiptv.ui
 
 import android.annotation.SuppressLint
+import android.net.http.SslError
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -28,6 +34,8 @@ import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +69,12 @@ fun BrowserScreen(
     var canGoBack by remember { mutableStateOf(false) }
     var canGoForward by remember { mutableStateOf(false) }
     var showKeyboardDialog by remember { mutableStateOf(false) }
+
+    var isLoading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
+    var mainFrameError by remember { mutableStateOf(false) }
+    var failedUrl by remember(initialUrl) { mutableStateOf(initialUrl) }
+    var mainFrameUrl by remember(initialUrl) { mutableStateOf(initialUrl) }
 
     var customView: View? by remember { mutableStateOf(null) }
     var customViewCallback: WebChromeClient.CustomViewCallback? by remember { mutableStateOf(null) }
@@ -214,6 +228,7 @@ fun BrowserScreen(
                 AndroidView(
                     factory = { ctx ->
                         WebView(ctx).apply {
+                            setBackgroundColor(android.graphics.Color.BLACK)
                             layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -258,12 +273,48 @@ fun BrowserScreen(
                             }
 
                             webViewClient = object : WebViewClient() {
+                                override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                                    super.onPageStarted(view, url, favicon)
+                                    mainFrameUrl = url ?: initialUrl
+                                    isLoading = true
+                                    loadError = null
+                                    mainFrameError = false
+                                }
+
+                                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                                    super.onReceivedError(view, request, error)
+                                    if (request?.isForMainFrame == true) {
+                                        mainFrameError = true
+                                        failedUrl = request.url?.toString() ?: view?.url ?: initialUrl
+                                        loadError = com.kraftplay.openiptv.util.browserLoadErrorMessage(
+                                            isSsl = false,
+                                            description = error?.description?.toString()
+                                        )
+                                        isLoading = false
+                                    }
+                                }
+
+                                override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                                    // Always cancel the failing resource; only main-frame error replaces the page.
+                                    handler?.cancel()
+                                    if (com.kraftplay.openiptv.util.shouldShowMainFrameSslError(mainFrameUrl, error?.url)) {
+                                        mainFrameError = true
+                                        failedUrl = view?.url ?: initialUrl
+                                        loadError = com.kraftplay.openiptv.util.browserLoadErrorMessage(isSsl = true, description = null)
+                                        isLoading = false
+                                    }
+                                }
+
                                 override fun onPageFinished(view: WebView?, url: String?) {
                                     super.onPageFinished(view, url)
-                                    canGoBack = view?.canGoBack() == true
-                                    canGoForward = view?.canGoForward() == true
-                                    currentUrl = url ?: ""
-                                    pageTitle = view?.title ?: "Браузер"
+                                    isLoading = false
+                                    if (!mainFrameError) {
+                                        loadError = null
+                                        canGoBack = view?.canGoBack() == true
+                                        canGoForward = view?.canGoForward() == true
+                                        currentUrl = url ?: ""
+                                        pageTitle = view?.title ?: "Браузер"
+                                    }
                                 }
                             }
                             webChromeClient = object : WebChromeClient() {
@@ -294,6 +345,41 @@ fun BrowserScreen(
                     },
                     modifier = Modifier.fillMaxSize()
                 )
+            }
+        }
+
+        if (loadError != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.94f))
+                    .clickable(onClick = {}),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(24.dp)
+                ) {
+                    Text(
+                        text = loadError.orEmpty(),
+                        color = Color.White,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(onClick = {
+                        val target = failedUrl
+                        loadError = null
+                        mainFrameError = false
+                        isLoading = true
+                        webView?.loadUrl(target)
+                    }) {
+                        Text("Повторить")
+                    }
+                }
+            }
+        } else if (isLoading) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color.White)
             }
         }
 
