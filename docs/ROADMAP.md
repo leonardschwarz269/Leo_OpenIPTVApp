@@ -18,8 +18,8 @@
 
 | Срез | Коммит | Статус | Проверка |
 |---|---|---|---|
-| Безопасный Back / двойной Back | `51a381f` | реализовано | BackPoliciesTest, runtime: плеер сначала скрывает контролы, главный double-Back/debounce |
-| Живые плитки: Продолжить просмотр | `f683a62` | реализовано | ContinueWatchingTest + RowTest, runtime-строка после просмотра |
+| Безопасный Back / двойной Back | `51a381f` | реализовано | BackPoliciesTest + runtime smoke в `docs/verification.md` |
+| Живые плитки: Продолжить просмотр | `f683a62` | реализовано | ContinueWatchingTest + RowTest + runtime-строка в `docs/verification.md` |
 | Очистка кэша с подтверждением | `0718f31` | реализовано | CacheMaintenanceTest, runtime Settings → Backup & Network → Clear cache |
 | Авто-пресеты / контраст стекла | `d74fe6b` | реализовано | ScreenPresetsTest/ContrastTest, car 64/32/24/24 policy, WCAG scrim |
 

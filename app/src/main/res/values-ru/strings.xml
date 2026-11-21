@@ -206,6 +206,7 @@
     <string name="clear_cache_subtitle">Освободить временные файлы без удаления плейлистов и настроек</string>
     <string name="clear_cache_confirm">Очистить временные файлы кэша? Плейлисты, избранное и настройки сохранятся.</string>
     <string name="cache_cleared">Кэш очищен</string>
+    <string name="cache_cleared_bytes">Кэш очищен: освобождено %1$d байт</string>
     <string name="backup_copied">Резервная копия скопирована в буфер обмена!</string>
     <string name="community">Сообщество и проект</string>
 

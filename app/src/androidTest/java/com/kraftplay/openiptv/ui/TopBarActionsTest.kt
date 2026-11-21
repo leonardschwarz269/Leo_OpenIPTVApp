@@ -65,7 +65,7 @@ class TopBarActionsTest {
     }
 
     @Test
-    fun autoActionsHaveAtLeast56dpTouchTargets() {
+    fun autoActionsHaveAtLeast64dpTouchTargets() {
         render(isAuto = true)
         val descriptions = localizedDescriptions + listOf("YouTube", "RuTube", "Browser")
         for (description in descriptions) {

@@ -1596,8 +1596,12 @@ fun SettingsScreen(
                     confirmButton = {
                         TextButton(onClick = {
                             showClearCacheDialog = false
-                            com.kraftplay.openiptv.util.clearCacheFiles(context.cacheDir)
-                            Toast.makeText(context, R.string.cache_cleared, Toast.LENGTH_SHORT).show()
+                            scope.launch(Dispatchers.IO) {
+                                val freed = com.kraftplay.openiptv.util.clearCacheFiles(context.cacheDir)
+                                withContext(Dispatchers.Main) {
+                                    Toast.makeText(context, context.getString(R.string.cache_cleared_bytes, freed), Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }) {
                             Text(androidx.compose.ui.res.stringResource(R.string.clear_cache))
                         }

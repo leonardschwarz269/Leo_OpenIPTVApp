@@ -7,7 +7,7 @@ This document records why some roadmap candidates are implemented, gated, or not
 - Back safety: player first Back hides controls without stopping; main default double-Back with 400ms debounce / 1500ms window, localized prompt.
 - Live tiles: Continue watching row from recent channels + viewing time, existing ChannelCard touch/D-pad/long-press parity, parental lock preserved.
 - User-controlled cleanup: Settings → Backup & Network → Clear cache, confirmation dialog, only `cacheDir` contents.
-- Car screen preset policy: 64dp targets / 32dp icons / 24dp gaps / 24sp minimum; WCAG contrast helpers; dark scrim for LiquidGlass.
+- Car screen preset policy: 64dp targets / 32dp icons / 24dp gaps / 24sp minimum policy constant (not yet applied to every text); WCAG contrast helpers; dark scrim for LiquidGlass.
 
 ## Not defensible as shippable safe features
 1. **Arbitrary phone-screen projection / launching arbitrary apps on Android Auto head unit.**
