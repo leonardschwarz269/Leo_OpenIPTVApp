@@ -80,8 +80,8 @@ fun getCategoryDisplayName(category: String): String {
     }
 }
 
-internal fun topBarTargetSize(isAuto: Boolean): Dp = if (isAuto) 56.dp else 48.dp
-internal fun topBarIconSize(isAuto: Boolean): Dp = if (isAuto) 28.dp else 24.dp
+internal fun topBarTargetSize(isAuto: Boolean): Dp = ScreenPresets.targetSize(isAuto).dp
+internal fun topBarIconSize(isAuto: Boolean): Dp = ScreenPresets.iconSize(isAuto).dp
 
 @Composable
 internal fun TopBarActions(
@@ -104,7 +104,8 @@ internal fun TopBarActions(
     val icon = topBarIconSize(isAuto)
     Row(
         modifier = Modifier.horizontalScroll(rememberScrollState()),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(ScreenPresets.gap(isAuto).dp)
     ) {
         if (isEpgLoading) ExpressiveLoadingIndicator(size = 28.dp, strokeWidth = 3.dp)
         if (showAddPlaylist) {

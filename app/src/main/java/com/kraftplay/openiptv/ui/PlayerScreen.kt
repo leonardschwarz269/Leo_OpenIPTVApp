@@ -846,7 +846,7 @@ fun PlayerScreen(
                             when (playerGlassTint) {
                                 "OLED Black" -> Color.Black.copy(alpha = 0.95f)
                                 "Transparent" -> Color.Transparent
-                                else -> if (uiStyle == "LiquidGlass") Color.Black.copy(alpha = 0.6f) else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f)
+                                else -> if (uiStyle == "LiquidGlass") Color.Black.copy(alpha = 0.85f) else MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f)
                             }
                         )
                         .focusGroup()
