@@ -200,6 +200,7 @@
     <string name="back_exit">Выход</string>
     <string name="back_to_list">Назад к списку</string>
     <string name="back_confirm">Подтверждение</string>
+    <string name="press_again_to_exit">Нажмите «Назад» ещё раз для выхода</string>
     <string name="backup_copied">Резервная копия скопирована в буфер обмена!</string>
     <string name="community">Сообщество и проект</string>
 

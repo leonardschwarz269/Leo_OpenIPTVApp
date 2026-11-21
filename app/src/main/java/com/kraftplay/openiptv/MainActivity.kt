@@ -214,7 +214,7 @@ fun OpenIptvRootContent(
         val context = LocalContext.current
         MaterialTheme(colorScheme = colorScheme) {
             val navController = rememberNavController()
-            var lastBackPressTime by remember { mutableStateOf(0L) }
+            var backExitState by remember { mutableStateOf(BackExitPolicy.State()) }
 
             LaunchedEffect(autoPlayUrl) {
                 if (!autoPlayUrl.isNullOrEmpty()) {
@@ -226,18 +226,12 @@ fun OpenIptvRootContent(
             BackHandler(enabled = true) {
                 val currentRoute = navController.currentDestination?.route
                 if (currentRoute == "main") {
-                    when (backBehavior) {
-                        "Exit" -> onExitApp()
-                        "Confirm", "Double press to exit" -> {
-                            val now = System.currentTimeMillis()
-                            if (now - lastBackPressTime < 2000) {
-                                onExitApp()
-                            } else {
-                                lastBackPressTime = now
-                                Toast.makeText(context, "Press again to exit", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                        "Back to list" -> { }
+                    val result = BackExitPolicy.onBack(backBehavior, System.currentTimeMillis(), backExitState)
+                    backExitState = result.state
+                    when (result.action) {
+                        BackExitPolicy.Action.EXIT -> onExitApp()
+                        BackExitPolicy.Action.PROMPT -> Toast.makeText(context, R.string.press_again_to_exit, Toast.LENGTH_SHORT).show()
+                        BackExitPolicy.Action.IGNORE -> { }
                     }
                 } else {
                     navController.popBackStack()

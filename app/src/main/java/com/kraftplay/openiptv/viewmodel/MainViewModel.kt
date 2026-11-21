@@ -5,6 +5,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.kraftplay.openiptv.BackExitPolicy
 import com.kraftplay.openiptv.data.EpgDatabase
 import com.kraftplay.openiptv.model.CustomThemeConfig
 import com.kraftplay.openiptv.model.EpgProgram
@@ -235,7 +236,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val carFullscreenMode = MutableStateFlow(prefs.getBoolean("car_fullscreen_mode", true))
     val autoHideTimeout = MutableStateFlow(prefs.getInt("auto_hide_timeout", 3))
     val bufferingLevel = MutableStateFlow(prefs.getString("buffering_level", "Standard") ?: "Standard")
-    val backBehavior = MutableStateFlow(prefs.getString("back_behavior", "Back to list") ?: "Back to list")
+    val backBehavior = MutableStateFlow(prefs.getString("back_behavior", BackExitPolicy.DEFAULT_BEHAVIOR) ?: BackExitPolicy.DEFAULT_BEHAVIOR)
     val sleepTimer = MutableStateFlow(0)
     val reloadStreamOnToggle = MutableStateFlow(prefs.getBoolean("reload_stream_toggle", false))
     val fullScreenByDefault = MutableStateFlow(prefs.getBoolean("full_screen_default", true))
