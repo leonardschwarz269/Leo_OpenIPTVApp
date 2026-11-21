@@ -29,3 +29,8 @@ captures/
 # OS
 .DS_Store
 Thumbs.db
+
+# Agent working artifacts (never publish internal plans/reports)
+.team/
+.hermes/
+.impeccable/
