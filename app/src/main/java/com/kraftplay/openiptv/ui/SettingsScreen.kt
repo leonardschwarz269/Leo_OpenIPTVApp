@@ -218,6 +218,7 @@ fun SettingsScreen(
     var showCategoryDialog by remember { mutableStateOf(false) }
     var showChannelDialog by remember { mutableStateOf(false) }
     var showImportDialog by remember { mutableStateOf(false) }
+    var showClearCacheDialog by remember { mutableStateOf(false) }
     var showCustomUiDialog by remember { mutableStateOf(false) }
     var customJsonText by remember { mutableStateOf(customThemeJson) }
 
@@ -1414,6 +1415,16 @@ fun SettingsScreen(
                                             badgeColorName = badgeColor,
                                             rotationEnabled = iconRotationEnabled
                                         )
+
+                                        ActionItem(
+                                            icon = Icons.Rounded.CleaningServices,
+                                            title = androidx.compose.ui.res.stringResource(R.string.clear_cache),
+                                            subtitle = androidx.compose.ui.res.stringResource(R.string.clear_cache_subtitle),
+                                            onClick = { showClearCacheDialog = true },
+                                            shapeName = badgeShape,
+                                            badgeColorName = badgeColor,
+                                            rotationEnabled = iconRotationEnabled
+                                        )
                                     }
                                 }
                             }
@@ -1573,6 +1584,28 @@ fun SettingsScreen(
                             )
                         )
                         editingEpgSource = null
+                    }
+                )
+            }
+
+            if (showClearCacheDialog) {
+                AlertDialog(
+                    onDismissRequest = { showClearCacheDialog = false },
+                    title = { Text(androidx.compose.ui.res.stringResource(R.string.clear_cache)) },
+                    text = { Text(androidx.compose.ui.res.stringResource(R.string.clear_cache_confirm)) },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            showClearCacheDialog = false
+                            com.kraftplay.openiptv.util.clearCacheFiles(context.cacheDir)
+                            Toast.makeText(context, R.string.cache_cleared, Toast.LENGTH_SHORT).show()
+                        }) {
+                            Text(androidx.compose.ui.res.stringResource(R.string.clear_cache))
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showClearCacheDialog = false }) {
+                            Text(androidx.compose.ui.res.stringResource(android.R.string.cancel))
+                        }
                     }
                 )
             }
