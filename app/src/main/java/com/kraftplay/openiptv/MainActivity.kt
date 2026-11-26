@@ -100,6 +100,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val autoPlayUrl = intent.getStringExtra("auto_play_url")
+        val debugForceAuto = BuildConfig.DEBUG && intent.getBooleanExtra("debug_force_auto", false)
 
         setContent {
             val viewModel: MainViewModel = viewModel()
@@ -120,6 +121,7 @@ class MainActivity : ComponentActivity() {
                 viewModel = viewModel,
                 autoPlayUrl = autoPlayUrl,
                 resultRegistryOwner = this@MainActivity,
+                isAuto = debugForceAuto,
                 onPlayingStateChanged = { setPlayingVideoState(it) },
                 onTriggerPip = { triggerPipMode() },
                 onExitApp = { finish() }
@@ -335,31 +337,39 @@ fun OpenIptvApp(
             )
         }
         composable("youtube") {
-            onPlayingStateChanged(true)
+            onPlayingStateChanged(false)
             com.kraftplay.openiptv.ui.YouTubeScreen(
+                isAuto = isAuto,
+                onFullscreenVideoChanged = { onPlayingStateChanged(it) },
                 onBack = { navController.popBackStack() }
             )
         }
         composable("rutube") {
-            onPlayingStateChanged(true)
+            onPlayingStateChanged(false)
             com.kraftplay.openiptv.ui.RuTubeScreen(
+                isAuto = isAuto,
+                onFullscreenVideoChanged = { onPlayingStateChanged(it) },
                 onBack = { navController.popBackStack() }
             )
         }
         composable("browser") {
-            onPlayingStateChanged(true)
+            onPlayingStateChanged(false)
             com.kraftplay.openiptv.ui.BrowserScreen(
                 initialUrl = "https://google.com",
+                isAuto = isAuto,
+                onFullscreenVideoChanged = { onPlayingStateChanged(it) },
                 onBack = { navController.popBackStack() }
             )
         }
         composable("prisma") {
-            onPlayingStateChanged(true)
+            onPlayingStateChanged(false)
             com.kraftplay.openiptv.ui.BrowserScreen(
                 // ponytail: prisma.ws currently serves a cert for *.a.trbcdn.net, so HTTPS fails.
                 // Intentional cleartext entry for this host only; no global TLS bypass.
                 // Upgrade to https://prisma.ws/ when the site fixes its certificate.
                 initialUrl = "http://prisma.ws/",
+                isAuto = isAuto,
+                onFullscreenVideoChanged = { onPlayingStateChanged(it) },
                 onBack = { navController.popBackStack() }
             )
         }

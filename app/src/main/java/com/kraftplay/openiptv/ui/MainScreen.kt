@@ -134,12 +134,12 @@ internal fun TopBarActions(
         IconButton(onClick = onRefresh, modifier = Modifier.size(target).tvFocusable()) {
             Icon(Icons.Default.Refresh, "Refresh", modifier = Modifier.size(icon))
         }
-        if (isAuto && onYouTube != null) {
+        if (onYouTube != null) {
             IconButton(onClick = onYouTube, modifier = Modifier.size(target).tvFocusable()) {
                 Icon(Icons.Default.PlayCircle, "YouTube", tint = Color(0xFFFF0000), modifier = Modifier.size(icon))
             }
         }
-        if (isAuto && onRuTube != null) {
+        if (onRuTube != null) {
             IconButton(onClick = onRuTube, modifier = Modifier.size(target).tvFocusable()) {
                 Icon(Icons.Default.OndemandVideo, "RuTube", tint = Color(0xFF00A2E8), modifier = Modifier.size(icon))
             }

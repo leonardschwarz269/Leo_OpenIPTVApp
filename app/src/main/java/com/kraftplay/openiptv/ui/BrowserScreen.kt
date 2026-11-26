@@ -2,7 +2,7 @@ package com.kraftplay.openiptv.ui
 
 import android.annotation.SuppressLint
 import android.net.http.SslError
-import android.view.MotionEvent
+import android.os.Message
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.SslErrorHandler
@@ -14,6 +14,7 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,11 +23,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Search
@@ -42,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,21 +61,37 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.kraftplay.openiptv.util.FocusedWebInput
+import com.kraftplay.openiptv.util.WebKeyboardMode
+import com.kraftplay.openiptv.util.attachCarInputBridge
+import com.kraftplay.openiptv.util.attachCarTouchListener
+import com.kraftplay.openiptv.util.buildDetectFocusedInputScript
+import com.kraftplay.openiptv.util.buildInstallAutoFocusListenerScript
+import com.kraftplay.openiptv.util.configureAuthWebView
+import com.kraftplay.openiptv.util.createAuthPopupWebView
+import com.kraftplay.openiptv.util.flushWebViewCookies
+import com.kraftplay.openiptv.util.handleWebNavAction
+import com.kraftplay.openiptv.util.shouldAutoShowCarKeyboard
 import java.net.URLEncoder
 
 @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
 @Composable
 fun BrowserScreen(
     initialUrl: String = "https://google.com",
+    isAuto: Boolean = false,
+    onFullscreenVideoChanged: (Boolean) -> Unit = {},
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
     var webView: WebView? by remember { mutableStateOf(null) }
+    var popupWebView: WebView? by remember { mutableStateOf(null) }
     var currentUrl by remember { mutableStateOf(initialUrl) }
     var pageTitle by remember { mutableStateOf("Браузер") }
     var canGoBack by remember { mutableStateOf(false) }
     var canGoForward by remember { mutableStateOf(false) }
     var showKeyboardDialog by remember { mutableStateOf(false) }
+    var keyboardMode by remember { mutableStateOf(WebKeyboardMode.URL) }
+    var focusedInput by remember { mutableStateOf(FocusedWebInput("", "text", "", false)) }
 
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
@@ -79,14 +102,50 @@ fun BrowserScreen(
     var customView: View? by remember { mutableStateOf(null) }
     var customViewCallback: WebChromeClient.CustomViewCallback? by remember { mutableStateOf(null) }
 
+    fun closePopup() {
+        flushWebViewCookies()
+        popupWebView?.stopLoading()
+        popupWebView?.destroy()
+        popupWebView = null
+        webView?.requestFocus()
+    }
+
+    val onFieldFocused: (FocusedWebInput) -> Unit = { info ->
+        focusedInput = info
+        keyboardMode = WebKeyboardMode.WEB_FIELD
+        showKeyboardDialog = true
+    }
+    val onNoFieldFocused: () -> Unit = {
+        focusedInput = FocusedWebInput("", "text", "", true)
+        keyboardMode = WebKeyboardMode.WEB_FIELD
+        showKeyboardDialog = true
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            flushWebViewCookies()
+            onFullscreenVideoChanged(false)
+            popupWebView?.destroy()
+        }
+    }
+
     BackHandler {
         if (customView != null) {
             customViewCallback?.onCustomViewHidden()
             customView = null
             customViewCallback = null
+            onFullscreenVideoChanged(false)
+        } else if (popupWebView != null) {
+            if (popupWebView?.canGoBack() == true) {
+                popupWebView?.goBack()
+            } else {
+                closePopup()
+            }
         } else if (webView?.canGoBack() == true) {
             webView?.goBack()
         } else {
+            flushWebViewCookies()
+            onFullscreenVideoChanged(false)
             com.kraftplay.openiptv.service.SharedPlayerManager.stopPlayback()
             onBack()
         }
@@ -105,7 +164,11 @@ fun BrowserScreen(
             )
         } else {
             Column(
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .imePadding()
             ) {
                 // Панель управления браузера
                 Surface(
@@ -125,6 +188,8 @@ fun BrowserScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             IconButton(onClick = {
+                                flushWebViewCookies()
+                                onFullscreenVideoChanged(false)
                                 com.kraftplay.openiptv.service.SharedPlayerManager.stopPlayback()
                                 onBack()
                             }) {
@@ -152,8 +217,33 @@ fun BrowserScreen(
                             )
                         }
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 8.dp)
+                                .horizontalScroll(rememberScrollState()),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.End
+                        ) {
                             IconButton(onClick = {
+                                val target = popupWebView ?: webView
+                                if (target != null) {
+                                    target.evaluateJavascript(
+                                        buildDetectFocusedInputScript(notifyIfMissing = true),
+                                        null
+                                    )
+                                } else {
+                                    onNoFieldFocused()
+                                }
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Default.Keyboard,
+                                    contentDescription = "Клавиатура для поля",
+                                    tint = Color.White
+                                )
+                            }
+                            IconButton(onClick = {
+                                keyboardMode = WebKeyboardMode.URL
                                 showKeyboardDialog = true
                             }) {
                                 Icon(
@@ -235,44 +325,16 @@ fun BrowserScreen(
                             )
                             isFocusable = true
                             isFocusableInTouchMode = true
-                            settings.javaScriptEnabled = true
-                            settings.domStorageEnabled = true
-                            settings.javaScriptCanOpenWindowsAutomatically = true
-                            settings.mediaPlaybackRequiresUserGesture = false
-                            settings.useWideViewPort = true
-                            settings.loadWithOverviewMode = true
-                            settings.userAgentString =
-                                "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
-
-                            addJavascriptInterface(
-                                object {
-                                    @android.webkit.JavascriptInterface
-                                    fun onInputFocused(initialValue: String) {
-                                        post {
-                                            showKeyboardDialog = true
-                                        }
-                                    }
-                                },
-                                "CarBridge"
-                            )
-
-                            setOnTouchListener { v, event ->
-                                if (event.action == MotionEvent.ACTION_UP) {
-                                    v.requestFocus()
-                                    postDelayed({
-                                        loadUrl("javascript:(function() {" +
-                                                "var e = document.activeElement;" +
-                                                "if (e && (e.tagName === 'INPUT' || e.tagName === 'TEXTAREA' || e.isContentEditable || e.getAttribute('contenteditable') === 'true')) {" +
-                                                "  var val = e.value || e.innerText || '';" +
-                                                "  window.CarBridge.onInputFocused(val);" +
-                                                "}" +
-                                                "})();")
-                                    }, 200)
-                                }
-                                false
-                            }
+                            configureAuthWebView(this)
+                            attachCarInputBridge(this, onFieldFocused, onNoFieldFocused)
+                            attachCarTouchListener(this, isAuto)
 
                             webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(
+                                    view: WebView?,
+                                    request: WebResourceRequest?
+                                ): Boolean = handleWebNavAction(view, request?.url?.toString())
+
                                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                     super.onPageStarted(view, url, favicon)
                                     mainFrameUrl = url ?: initialUrl
@@ -307,6 +369,10 @@ fun BrowserScreen(
 
                                 override fun onPageFinished(view: WebView?, url: String?) {
                                     super.onPageFinished(view, url)
+                                    flushWebViewCookies()
+                                    if (shouldAutoShowCarKeyboard(isAuto)) {
+                                        view?.evaluateJavascript(buildInstallAutoFocusListenerScript(), null)
+                                    }
                                     isLoading = false
                                     if (!mainFrameError) {
                                         loadError = null
@@ -325,18 +391,44 @@ fun BrowserScreen(
                                     }
                                 }
 
+                                override fun onCreateWindow(
+                                    view: WebView?,
+                                    isDialog: Boolean,
+                                    isUserGesture: Boolean,
+                                    resultMsg: Message?
+                                ): Boolean {
+                                    val transport = resultMsg?.obj as? WebView.WebViewTransport ?: return false
+                                    val child = createAuthPopupWebView(
+                                        context = ctx,
+                                        isAuto = isAuto,
+                                        onInputFocused = onFieldFocused,
+                                        onNoInputFocused = onNoFieldFocused,
+                                        onClosePopup = { closePopup() }
+                                    )
+                                    popupWebView = child
+                                    transport.webView = child
+                                    resultMsg.sendToTarget()
+                                    return true
+                                }
+
+                                override fun onCloseWindow(window: WebView?) {
+                                    closePopup()
+                                }
+
                                 override fun onShowCustomView(
                                     view: View?,
                                     callback: CustomViewCallback?
                                 ) {
                                     customView = view
                                     customViewCallback = callback
+                                    onFullscreenVideoChanged(true)
                                 }
 
                                 override fun onHideCustomView() {
                                     customViewCallback?.onCustomViewHidden()
                                     customView = null
                                     customViewCallback = null
+                                    onFullscreenVideoChanged(false)
                                 }
                             }
                             loadUrl(initialUrl)
@@ -383,12 +475,24 @@ fun BrowserScreen(
             }
         }
 
+        popupWebView?.let { popup ->
+            AuthPopupWebViewOverlay(
+                popupWebView = popup,
+                onClose = { closePopup() }
+            )
+        }
+
         if (showKeyboardDialog) {
-            CarOnScreenKeyboardDialog(
-                initialText = currentUrl,
+            WebKeyboardModalHost(
+                keyboardMode = keyboardMode,
+                focusedInput = focusedInput,
+                searchInitialText = currentUrl,
+                searchPlaceholder = "Адрес сайта или поиск...",
+                searchConfirmLabel = "Перейти",
+                searchInitialLayout = KeyboardLayoutMode.EN,
+                activeWebViewProvider = { popupWebView ?: webView },
                 onDismiss = { showKeyboardDialog = false },
-                onConfirm = { query ->
-                    val safeText = query.replace("'", "\\'").replace("\n", " ")
+                onSubmitSearchOrUrl = { query ->
                     val targetSearchUrl = if (query.startsWith("http://") || query.startsWith("https://")) {
                         query
                     } else if (query.contains(".") && !query.contains(" ")) {
@@ -397,17 +501,7 @@ fun BrowserScreen(
                         val encoded = runCatching { URLEncoder.encode(query, "UTF-8") }.getOrDefault(query)
                         "https://www.google.com/search?q=$encoded"
                     }
-                    webView?.loadUrl("javascript:(function() {" +
-                            "var e = document.activeElement;" +
-                            "if (e && (e.tagName === 'INPUT' || e.tagName === 'TEXTAREA' || e.isContentEditable || e.getAttribute('contenteditable') === 'true')) {" +
-                            "  if (e.isContentEditable) e.innerText = '$safeText';" +
-                            "  else e.value = '$safeText';" +
-                            "  e.dispatchEvent(new InputEvent('input', { bubbles: true, data: '$safeText', inputType: 'insertText' }));" +
-                            "  e.dispatchEvent(new Event('change', { bubbles: true }));" +
-                            "} else {" +
-                            "  window.location.href = '$targetSearchUrl';" +
-                            "}" +
-                            "})();")
+                    webView?.loadUrl(targetSearchUrl)
                 }
             )
         }
